@@ -2,6 +2,7 @@
 #define MODEL_INTERFACES_H
 
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace std;
@@ -114,8 +115,8 @@ struct BotQueryRequest {
     vector<int> availableScheduleIds;
 
     BotQueryRequest() = default;
-    BotQueryRequest(const string& message, const string& metadata, const vector<int>& ids)
-            : userMessage(message), scheduleMetadata(metadata), availableScheduleIds(ids) {}
+    BotQueryRequest(string message, string metadata, const vector<int>& ids)
+            : userMessage(std::move(message)), scheduleMetadata(std::move(metadata)), availableScheduleIds(ids) {}
 };
 
 struct BotQueryResponse {
@@ -127,27 +128,8 @@ struct BotQueryResponse {
     string errorMessage;
 
     BotQueryResponse() : isFilterQuery(false), hasError(false) {}
-    BotQueryResponse(const string& message, const string& query, const vector<string>& params, bool isFilter)
-            : userMessage(message), sqlQuery(query), queryParameters(params), isFilterQuery(isFilter), hasError(false) {}
-};
-
-struct ScheduleFilterRequest {
-    string sqlQuery;
-    vector<string> parameters;
-    vector<int> availableScheduleIds;
-
-    ScheduleFilterRequest() = default;
-    ScheduleFilterRequest(const string& query, const vector<string>& params, const vector<int>& ids)
-            : sqlQuery(query), parameters(params), availableScheduleIds(ids) {}
-};
-
-struct ScheduleFilterResult {
-    vector<int> filteredScheduleIds;
-    bool hasError;
-    string errorMessage;
-
-    ScheduleFilterResult() : hasError(false) {}
-    ScheduleFilterResult(const vector<int>& ids) : filteredScheduleIds(ids), hasError(false) {}
+    BotQueryResponse(string message, string query, const vector<string>& params, bool isFilter)
+            : userMessage(std::move(message)), sqlQuery(std::move(query)), queryParameters(params), isFilterQuery(isFilter), hasError(false) {}
 };
 
 enum class ModelOperation {
@@ -160,20 +142,13 @@ enum class ModelOperation {
     CLEAR_DATABASE,
     BOT_QUERY_SCHEDULES,
     GET_LAST_FILTERED_IDS,
-    FILTER_SCHEDULES_BY_SQL,
-    BACKUP_DATABASE,
-    RESTORE_DATABASE,
-    GET_DATABASE_STATS,
     LOAD_FROM_HISTORY,
     GET_FILE_HISTORY,
     DELETE_FILE_FROM_HISTORY,
     SAVE_SCHEDULES_TO_DB,
     LOAD_SCHEDULES_FROM_DB,
     GET_SCHEDULE_SETS,
-    DELETE_SCHEDULE_SET,
-    GET_SCHEDULES_BY_SET_ID,
-    FILTER_SCHEDULES_BY_METRICS,
-    GET_SCHEDULE_STATISTICS
+    DELETE_SCHEDULE_SET
 };
 
 struct ScheduleFilterData {
@@ -184,7 +159,7 @@ struct ScheduleFilterData {
     int maxAvgStart = -1;
     int minAvgEnd = -1;
     int maxAvgEnd = -1;
-    int setId = -1;  // Optional: filter by specific set
+    int setId = -1;
 
     ScheduleFilterData() = default;
 
@@ -200,14 +175,14 @@ struct ScheduleSaveData {
 
     ScheduleSaveData() = default;
 
-    ScheduleSaveData(const vector<InformativeSchedule>& scheds, const string& name, const vector<int>& fileIds)
-            : schedules(scheds), setName(name), sourceFileIds(fileIds) {}
+    ScheduleSaveData(const vector<InformativeSchedule>& scheds, string  name, const vector<int>& fileIds)
+            : schedules(scheds), setName(std::move(name)), sourceFileIds(fileIds) {}
 };
 
 class IModel {
 public:
     virtual ~IModel() = default;
-    virtual void* executeOperation(ModelOperation operation, const void* data, const std::string& path) = 0;
+    virtual void* executeOperation(ModelOperation operation, const void* data, const string& path) = 0;
 };
 
 #endif //MODEL_INTERFACES_H

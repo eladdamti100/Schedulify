@@ -46,10 +46,6 @@ public:
     vector<MetadataEntity> getAllMetadata();
 
     bool clearAllData();
-    int getTableRowCount(const string& tableName);
-
-    bool repairDatabase();
-    void debugDatabaseSchema();
 
     bool beginTransaction();
     bool commitTransaction();
@@ -63,7 +59,7 @@ private:
     DatabaseManager() = default;
     ~DatabaseManager();
 
-    bool hasActiveConnections();
+    static bool hasActiveConnections();
     void forceCloseActiveQueries();
 
     DatabaseManager(const DatabaseManager&) = delete;

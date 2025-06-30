@@ -26,15 +26,11 @@ public:
                         const vector<int>& sourceFileIds = {});
     bool insertSchedules(const vector<InformativeSchedule>& schedules, const string& setName = "",
                          const vector<int>& sourceFileIds = {});
-    bool updateSchedule(int scheduleId, const InformativeSchedule& schedule);
-    bool deleteSchedule(int scheduleId);
     bool deleteAllSchedules();
     bool deleteSchedulesBySetId(int setId);
 
     // Schedule retrieval operations
     static vector<InformativeSchedule> getAllSchedules();
-    InformativeSchedule getScheduleById(int id);
-    vector<InformativeSchedule> getSchedulesByName(const string& name);
     vector<InformativeSchedule> getSchedulesBySetId(int setId);
 
     // Schedule filtering operations
@@ -42,7 +38,7 @@ public:
                                                       int minAvgStart = -1,int maxAvgStart = -1, int minAvgEnd = -1,
                                                       int maxAvgEnd = -1);
 
-    // NEW: SQL-based filtering operations for bot functionality
+    // SQL filtering operations for bot functionality
     vector<int> executeCustomQuery(const string& sqlQuery, const vector<string>& parameters);
     vector<InformativeSchedule> getSchedulesByIds(const vector<int>& scheduleIds);
     string getSchedulesMetadataForBot();
@@ -51,25 +47,19 @@ public:
     int createScheduleSet(const string& setName, const vector<int>& sourceFileIds = {});
     vector<ScheduleSetEntity> getAllScheduleSets();
     ScheduleSetEntity getScheduleSetById(int setId);
-    bool updateScheduleSet(int setId, const string& setName);
     bool deleteScheduleSet(int setId);
 
     // Utility operations
-    bool scheduleExists(int scheduleId);
     bool scheduleSetExists(int setId);
     int getScheduleCount();
     int getScheduleCountBySetId(int setId);
     int getScheduleSetCount();
-    QDateTime getScheduleCreationTime(int scheduleId);
 
     // Statistics operations
     map<string, int> getScheduleStatistics();
-    vector<InformativeSchedule> getRecentSchedules(int limit = 10);
 
     // Performance operations for bulk inserts
     bool insertSchedulesBulk(const vector<InformativeSchedule>& schedules, int setId);
-
-    void debugPrintScheduleData(int limit = 10);
 
 private:
 

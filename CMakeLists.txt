@@ -116,7 +116,6 @@ set(PROJECT_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/parsers/excel_parser.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/parsers/validate_courses.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/parsers/jsonParser.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/model/src/parsers/scheduleToMT.cpp
 
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/schedule_algorithm/CourseLegalComb.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/schedule_algorithm/ScheduleBuilder.cpp
@@ -133,10 +132,10 @@ set(PROJECT_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_json_helpers.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/cleanup_manager.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_utils.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/schedule_filter_service.cpp
 
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/sched_bot/claude_api_integration.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/sched_bot/sql_validator.cpp
-        model/src/db/schedule_filter_service.cpp
 )
 
 qt_add_resources(RESOURCES view/qml.qrc)

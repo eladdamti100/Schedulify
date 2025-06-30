@@ -128,46 +128,6 @@ DatabaseManager::~DatabaseManager() {
     } catch (const std::exception& e) {}
 }
 
-bool DatabaseManager::repairDatabase() {
-    Logger::get().logInfo("Attempting database repair...");
-    return DatabaseRepair::repairDatabase(*this);
-}
-
-void DatabaseManager::debugDatabaseSchema() {
-    if (!isConnected()) {
-        Logger::get().logError("Database not connected for schema debug");
-        return;
-    }
-
-    Logger::get().logInfo("=== DATABASE SCHEMA DEBUG ===");
-
-    // List all tables
-    QSqlQuery tablesQuery("SELECT name FROM sqlite_master WHERE type='table'", db);
-    Logger::get().logInfo("Tables in database:");
-    while (tablesQuery.next()) {
-        QString tableName = tablesQuery.value(0).toString();
-        Logger::get().logInfo("- " + tableName.toStdString());
-
-        // Show columns for each table
-        QSqlQuery columnsQuery("PRAGMA table_info(" + tableName + ")", db);
-        while (columnsQuery.next()) {
-            QString columnName = columnsQuery.value(1).toString();
-            QString columnType = columnsQuery.value(2).toString();
-            Logger::get().logInfo("  Column: " + columnName.toStdString() + " (" + columnType.toStdString() + ")");
-        }
-    }
-
-    // List all indexes
-    QSqlQuery indexesQuery("SELECT name FROM sqlite_master WHERE type='index'", db);
-    Logger::get().logInfo("Indexes in database:");
-    while (indexesQuery.next()) {
-        QString indexName = indexesQuery.value(0).toString();
-        Logger::get().logInfo("- " + indexName.toStdString());
-    }
-
-    Logger::get().logInfo("=== END SCHEMA DEBUG ===");
-}
-
 bool DatabaseManager::isConnected() const {
     return isInitialized && db.isOpen();
 }
@@ -264,19 +224,6 @@ bool DatabaseManager::clearAllData() {
     return transaction.commit();
 }
 
-int DatabaseManager::getTableRowCount(const string& tableName) {
-    if (!isConnected()) return -1;
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM " + QString::fromStdString(tableName));
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-
-    return -1;
-}
-
 bool DatabaseManager::beginTransaction() {
     if (!isConnected()) return false;
     return db.transaction();
@@ -308,14 +255,14 @@ bool DatabaseManager::executeQuery(const QString& query, const QVariantList& par
     return true;
 }
 
-DatabaseTransaction::DatabaseTransaction(DatabaseManager& dbManager) : db(dbManager) {
-    db.beginTransaction();
-}
-
 DatabaseTransaction::~DatabaseTransaction() {
     if (!committed && !rolledBack) {
         rollback();
     }
+}
+
+DatabaseTransaction::DatabaseTransaction(DatabaseManager& dbManager) : db(dbManager) {
+    db.beginTransaction();
 }
 
 bool DatabaseTransaction::commit() {
@@ -392,35 +339,21 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
                 currentSchemaVersion = std::stoi(version);
 
                 if (currentSchemaVersion < getCurrentSchemaVersion()) {
-                    needsSchemaUpgrade = true;
+                    // For now, just recreate instead of upgrading
+                    Logger::get().logWarning("Old database version found - recreating database");
+                    needsSchemaCreation = true;
                 } else if (currentSchemaVersion > getCurrentSchemaVersion()) {
                     Logger::get().logError("Database schema version is newer than supported");
                     closeDatabase();
                     return false;
                 }
+                // If versions match, assume database is good (remove validation)
             } else {
-                needsSchemaCreation = true;
-            }
-        }
-
-        if (!needsSchemaCreation && !needsSchemaUpgrade) {
-            if (!schemaManager->validateSchema()) {
-                Logger::get().logWarning("Schema validation failed - recreating tables");
                 needsSchemaCreation = true;
             }
         }
     } else {
         needsSchemaCreation = true;
-    }
-
-    if (needsSchemaUpgrade) {
-        if (!schemaManager->upgradeSchema(currentSchemaVersion, getCurrentSchemaVersion())) {
-            Logger::get().logError("Schema upgrade failed - recreating database");
-            needsSchemaCreation = true;
-            needsSchemaUpgrade = false;
-        } else {
-            updateMetadata("schema_version", std::to_string(getCurrentSchemaVersion()));
-        }
     }
 
     if (needsSchemaCreation) {

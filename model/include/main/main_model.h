@@ -12,7 +12,6 @@
 #include "excel_parser.h"
 #include "validate_courses.h"
 #include "jsonParser.h"
-#include "scheduleToMT.h"
 #include "model_db_integration.h"
 #include "db_manager.h"
 #include "sql_validator.h"
@@ -73,19 +72,12 @@ private:
     static vector<InformativeSchedule> loadSchedulesFromDB(int setId = -1);
     static vector<ScheduleSetEntity> getScheduleSetsFromDB();
     static bool deleteScheduleSetFromDB(int setId);
-    static BotQueryResponse generateDemoResponse(const BotQueryRequest& request);
     static BotQueryResponse processClaudeQuery(const BotQueryRequest& request);
 
-    // Bot query processing - main coordination method
-    static BotFilterResult processBotQuery(const BotQueryRequest& request);
-
-    // Static member to store last filtered IDs
     static std::vector<int> lastFilteredScheduleIds;
-
-    vector<Course> lastGeneratedCourses;
-    vector<string> courseFileErrors;
-    vector<InformativeSchedule> lastGeneratedSchedules;
-    string scheduleMetaData = "";
+    static vector<Course> lastGeneratedCourses;
+    static vector<string> courseFileErrors;
+    static vector<InformativeSchedule> lastGeneratedSchedules;
 };
 
 inline IModel* getModel() {

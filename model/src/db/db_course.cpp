@@ -1,6 +1,5 @@
 #include "db_courses.h"
 
-
 DatabaseCourseManager::DatabaseCourseManager(QSqlDatabase& database) : db(database) {
 }
 
@@ -92,35 +91,6 @@ bool DatabaseCourseManager::insertCourses(const vector<Course>& courses, int fil
     return successCount == static_cast<int>(courses.size());
 }
 
-bool DatabaseCourseManager::updateCourse(const Course& course, int fileId) {
-    return insertCourse(course, fileId); // Uses INSERT OR REPLACE
-}
-
-bool DatabaseCourseManager::deleteCourse(int courseId) {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for course deletion");
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM course WHERE id = ?");
-    query.addBindValue(courseId);
-
-    if (!query.exec()) {
-        Logger::get().logError("Failed to delete course: " + query.lastError().text().toStdString());
-        return false;
-    }
-
-    int rowsAffected = query.numRowsAffected();
-    if (rowsAffected == 0) {
-        Logger::get().logWarning("No course found with ID: " + std::to_string(courseId));
-        return false;
-    }
-
-    Logger::get().logInfo("Course deleted successfully (ID: " + std::to_string(courseId) + ")");
-    return true;
-}
-
 bool DatabaseCourseManager::deleteAllCourses() {
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for course deletion");
@@ -200,26 +170,6 @@ Course DatabaseCourseManager::getCourseById(int id) {
     }
 
     return course;
-}
-
-vector<Course> DatabaseCourseManager::getCoursesByName(const string& name) {
-    vector<Course> courses;
-    if (!db.isOpen()) {
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
-        FROM course WHERE name LIKE ? ORDER BY name
-    )");
-    query.addBindValue("%" + QString::fromStdString(name) + "%");
-
-    while (query.next()) {
-        courses.push_back(createCourseFromQuery(query));
-    }
-
-    return courses;
 }
 
 vector<Course> DatabaseCourseManager::getCoursesByFileId(int fileId) {
@@ -309,75 +259,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
     return resolveConflicts(conflictMap, warnings);
 }
 
-vector<Course> DatabaseCourseManager::getCoursesByRawId(const string& rawId) {
-    vector<Course> courses;
-    if (!db.isOpen()) {
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
-        FROM course WHERE raw_id = ? ORDER BY course_file_id
-    )");
-    query.addBindValue(QString::fromStdString(rawId));
-
-    while (query.next()) {
-        courses.push_back(createCourseFromQuery(query));
-    }
-
-    return courses;
-}
-
-bool DatabaseCourseManager::courseExists(int courseId) {
-    if (!db.isOpen()) {
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM course WHERE id = ?");
-    query.addBindValue(courseId);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt() > 0;
-    }
-
-    return false;
-}
-
-bool DatabaseCourseManager::courseExistsByRawId(const string& rawId) {
-    if (!db.isOpen()) {
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM course WHERE raw_id = ?");
-    query.addBindValue(QString::fromStdString(rawId));
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt() > 0;
-    }
-
-    return false;
-}
-
-bool DatabaseCourseManager::courseExistsByRawIdAndFileId(const string& rawId, int fileId) {
-    if (!db.isOpen()) {
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM course WHERE raw_id = ? AND file_id = ?");
-    query.addBindValue(QString::fromStdString(rawId));
-    query.addBindValue(fileId);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt() > 0;
-    }
-
-    return false;
-}
-
 int DatabaseCourseManager::getCourseCount() {
     if (!db.isOpen()) {
         return -1;
@@ -406,84 +287,6 @@ int DatabaseCourseManager::getCourseCountByFileId(int fileId) {
     }
 
     return -1;
-}
-
-QDateTime DatabaseCourseManager::getCourseCreationTime(int courseId) {
-    if (!db.isOpen()) {
-        return QDateTime();
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT created_at FROM course WHERE id = ?");
-    query.addBindValue(courseId);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toDateTime();
-    }
-
-    return QDateTime();
-}
-
-map<string, int> DatabaseCourseManager::getCourseCountsByType() {
-    map<string, int> counts;
-    if (!db.isOpen()) {
-        return counts;
-    }
-
-    QSqlQuery query(R"(
-        SELECT f.file_type, COUNT(c.id) as course_count
-        FROM course c
-        JOIN file f ON c.file_id = f.id
-        GROUP BY f.file_type
-    )", db);
-
-    while (query.next()) {
-        string fileType = query.value(0).toString().toStdString();
-        int count = query.value(1).toInt();
-        counts[fileType] = count;
-    }
-
-    return counts;
-}
-
-vector<Course> DatabaseCourseManager::getCoursesCreatedAfter(const QDateTime& dateTime) {
-    vector<Course> courses;
-    if (!db.isOpen()) {
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
-        FROM course WHERE created_at > ? ORDER BY created_at DESC
-    )");
-    query.addBindValue(dateTime);
-
-    while (query.next()) {
-        courses.push_back(createCourseFromQuery(query));
-    }
-
-    return courses;
-}
-
-vector<Course> DatabaseCourseManager::getCoursesByTeacher(const string& teacher) {
-    vector<Course> courses;
-    if (!db.isOpen()) {
-        return courses;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
-        FROM course WHERE teacher LIKE ? ORDER BY name
-    )");
-    query.addBindValue("%" + QString::fromStdString(teacher) + "%");
-
-    while (query.next()) {
-        courses.push_back(createCourseFromQuery(query));
-    }
-
-    return courses;
 }
 
 Course DatabaseCourseManager::createCourseFromQuery(QSqlQuery& query) {

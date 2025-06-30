@@ -122,11 +122,6 @@ bool ModelDatabaseIntegration::loadCoursesToDatabase(const vector<Course>& cours
         Logger::get().logInfo("SUCCESS: All data saved to database");
         Logger::get().logInfo("File ID: " + to_string(fileId) + ", Courses: " + to_string(courses.size()));
 
-        // Trigger callback if set
-        if (m_onCoursesLoaded) {
-            m_onCoursesLoaded(courses);
-        }
-
         return true;
 
     } catch (const exception& e) {
@@ -179,23 +174,6 @@ bool ModelDatabaseIntegration::insertFile(const string& fileName, const string& 
     return true;
 }
 
-bool ModelDatabaseIntegration::updateFile(int fileId, const string& fileName, const string& fileType) {
-    if (!isInitialized()) {
-        Logger::get().logError("Database not initialized for file update");
-        return false;
-    }
-
-    auto& db = DatabaseManager::getInstance();
-    if (!db.files()->updateFile(fileId, fileName, fileType)) {
-        Logger::get().logError("Failed to update file in database");
-        return false;
-    }
-
-    updateLastAccessMetadata();
-    Logger::get().logInfo("Successfully updated file: " + fileName);
-    return true;
-}
-
 vector<FileEntity> ModelDatabaseIntegration::getAllFiles() {
     if (!isInitialized()) {
         Logger::get().logError("Database not initialized for file retrieval");
@@ -226,30 +204,6 @@ vector<FileEntity> ModelDatabaseIntegration::getAllFiles() {
         Logger::get().logError("Exception during file retrieval: " + string(e.what()));
         return {};
     }
-}
-
-FileEntity ModelDatabaseIntegration::getFileByName(const string& fileName) {
-    if (!isInitialized()) {
-        Logger::get().logError("Database not initialized for file retrieval");
-        return {};
-    }
-
-    auto file = DatabaseManager::getInstance().files()->getFileByName(fileName);
-    updateLastAccessMetadata();
-
-    return file;
-}
-
-int ModelDatabaseIntegration::getFileIdByName(const string& fileName) {
-    if (!isInitialized()) {
-        Logger::get().logError("Database not initialized for file ID retrieval");
-        return -1;
-    }
-
-    int fileId = DatabaseManager::getInstance().files()->getFileIdByName(fileName);
-    updateLastAccessMetadata();
-
-    return fileId;
 }
 
 vector<Course> ModelDatabaseIntegration::getCoursesFromDatabase() {
@@ -287,45 +241,7 @@ bool ModelDatabaseIntegration::clearAllDatabaseData() {
     return true;
 }
 
-ModelDatabaseIntegration::DatabaseStats ModelDatabaseIntegration::getDatabaseStats() {
-    DatabaseStats stats = {};
-
-    if (!isInitialized()) {
-        return stats;
-    }
-
-    auto& db = DatabaseManager::getInstance();
-
-    stats.courseCount = db.getTableRowCount("course");
-    stats.fileCount = db.getTableRowCount("file");
-    stats.metadataCount = db.getTableRowCount("metadata");
-
-    stats.lastUpdate = db.getMetadata("last_access", "Never");
-
-    // Get database file size (approximate)
-    stats.databaseSize = "Unknown";
-
-    return stats;
-}
-
-void ModelDatabaseIntegration::enableAutoSave(bool enable) {
-    m_autoSaveEnabled = enable;
-
-    auto& db = DatabaseManager::getInstance();
-    db.updateMetadata("auto_save_enabled", enable ? "true" : "false");
-
-    Logger::get().logInfo("Auto-save " + string(enable ? "enabled" : "disabled"));
-}
-
-bool ModelDatabaseIntegration::isAutoSaveEnabled() const {
-    return m_autoSaveEnabled;
-}
-
-void ModelDatabaseIntegration::setOnCoursesLoaded(function<void(const vector<Course>&)> callback) {
-    m_onCoursesLoaded = callback;
-}
-
-void ModelDatabaseIntegration::updateLastAccessMetadata() {
+void ModelDatabaseIntegration::updateLastAccessMetadata() const {
     if (isInitialized()) {
         auto& db = DatabaseManager::getInstance();
         db.updateMetadata("last_access", QDateTime::currentDateTime().toString(Qt::ISODate).toStdString());
@@ -465,36 +381,5 @@ bool ModelDatabaseIntegration::deleteScheduleSet(int setId) {
     } catch (const exception& e) {
         Logger::get().logError("Exception during schedule set deletion: " + string(e.what()));
         return false;
-    }
-}
-
-vector<InformativeSchedule> ModelDatabaseIntegration::filterSchedulesByMetrics(const ScheduleFilterData& filters) {
-    if (!isInitialized()) {
-        Logger::get().logError("Database not initialized for schedule filtering");
-        return {};
-    }
-
-    try {
-        auto& db = DatabaseManager::getInstance();
-
-        if (!db.isConnected()) {
-            Logger::get().logError("Database connection lost during schedule filtering");
-            return {};
-        }
-
-        auto schedules = db.schedules()->getSchedulesByMetrics(
-                filters.maxDays, filters.maxGaps, filters.maxGapTime,
-                filters.minAvgStart, filters.maxAvgStart, filters.minAvgEnd, filters.maxAvgEnd
-        );
-
-        updateLastAccessMetadata();
-
-        Logger::get().logInfo("Filtered to " + std::to_string(schedules.size()) + " schedules matching criteria");
-
-        return schedules;
-
-    } catch (const exception& e) {
-        Logger::get().logError("Exception during schedule filtering: " + string(e.what()));
-        return {};
     }
 }
