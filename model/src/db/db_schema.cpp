@@ -65,6 +65,7 @@ bool DatabaseSchema::createCourseTable() {
             raw_id TEXT NOT NULL,
             name TEXT NOT NULL,
             teacher TEXT NOT NULL,
+            semester INTEGER NOT NULL DEFAULT 1,
             lectures_json TEXT DEFAULT '[]',
             tutorials_json TEXT DEFAULT '[]',
             labs_json TEXT DEFAULT '[]',
@@ -145,8 +146,18 @@ bool DatabaseSchema::createCourseIndexes() {
         success = false;
     }
 
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_semester ON course(semester)")) {
+        Logger::get().logWarning("Failed to create course semester index");
+        success = false;
+    }
+
     if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_composite ON course(course_file_id, file_id)")) {
         Logger::get().logWarning("Failed to create course composite index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_semester_raw_id ON course(semester, raw_id)")) {
+        Logger::get().logWarning("Failed to create course semester+raw_id index");
         success = false;
     }
 

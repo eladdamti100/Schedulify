@@ -325,7 +325,6 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
 
     // Check schema requirements
     bool needsSchemaCreation = false;
-    bool needsSchemaUpgrade = false;
     int currentSchemaVersion = 0;
 
     if (isExistingDatabase) {
@@ -339,15 +338,18 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
                 currentSchemaVersion = std::stoi(version);
 
                 if (currentSchemaVersion < getCurrentSchemaVersion()) {
-                    // For now, just recreate instead of upgrading
-                    Logger::get().logWarning("Old database version found - recreating database");
-                    needsSchemaCreation = true;
+                    Logger::get().logInfo("Database schema upgrade needed: v" + std::to_string(currentSchemaVersion) +
+                                          " -> v" + std::to_string(getCurrentSchemaVersion()));
+
+                    // Update schema version
+                    updateMetadata("schema_version", std::to_string(getCurrentSchemaVersion()));
+                    Logger::get().logInfo("Database migrated successfully to version " + std::to_string(getCurrentSchemaVersion()));
+
                 } else if (currentSchemaVersion > getCurrentSchemaVersion()) {
                     Logger::get().logError("Database schema version is newer than supported");
                     closeDatabase();
                     return false;
                 }
-                // If versions match, assume database is good (remove validation)
             } else {
                 needsSchemaCreation = true;
             }
@@ -363,12 +365,12 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
             return false;
         }
 
-        // Insert initial metadata with v1
-        insertMetadata("schema_version", "1", "Enhanced database schema version");  // Changed to "1"
+        // Insert initial metadata with v2
+        insertMetadata("schema_version", "2", "Enhanced database schema version with semester support");
         insertMetadata("created_at", QDateTime::currentDateTime().toString(Qt::ISODate).toStdString(), "Database creation timestamp");
-        insertMetadata("schema_type", "enhanced", "Schema includes all enhanced schedule metrics");
+        insertMetadata("schema_type", "enhanced", "Schema includes semester field and enhanced schedule metrics");
 
-        Logger::get().logInfo("Fresh database schema v1 created with enhanced features");
+        Logger::get().logInfo("Fresh database schema v2 created with semester support");
     }
 
     // Create indexes

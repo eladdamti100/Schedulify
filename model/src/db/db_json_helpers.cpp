@@ -164,6 +164,7 @@ string DatabaseJsonHelpers::courseToJson(const Course& course) {
     courseObj["raw_id"] = QString::fromStdString(course.raw_id);
     courseObj["name"] = QString::fromStdString(course.name);
     courseObj["teacher"] = QString::fromStdString(course.teacher);
+    courseObj["semester"] = course.semester;  // NEW: Add semester field
     courseObj["lectures"] = QJsonDocument::fromJson(QByteArray::fromStdString(groupsToJson(course.Lectures))).array();
     courseObj["tutorials"] = QJsonDocument::fromJson(QByteArray::fromStdString(groupsToJson(course.Tirgulim))).array();
     courseObj["labs"] = QJsonDocument::fromJson(QByteArray::fromStdString(groupsToJson(course.labs))).array();
@@ -180,11 +181,17 @@ Course DatabaseJsonHelpers::courseFromJson(const string& json, int id, const str
     course.raw_id = raw_id;
     course.name = name;
     course.teacher = teacher;
+    course.semester = 1; // Default value
 
     QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(json));
     if (!doc.isObject()) return course;
 
     QJsonObject courseObj = doc.object();
+
+    // NEW: Read semester field if available
+    if (courseObj.contains("semester")) {
+        course.semester = courseObj["semester"].toInt();
+    }
 
     // Parse groups from JSON arrays
     if (courseObj.contains("lectures")) {

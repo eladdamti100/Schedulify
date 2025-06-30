@@ -3,6 +3,7 @@
 DatabaseCourseManager::DatabaseCourseManager(QSqlDatabase& database) : db(database) {
 }
 
+
 bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for course insertion");
@@ -17,14 +18,15 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
     QSqlQuery query(db);
     query.prepare(R"(
         INSERT OR REPLACE INTO course
-        (course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        (course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     )");
 
     query.addBindValue(course.id);  // This goes to course_file_id
     query.addBindValue(QString::fromStdString(course.raw_id));
     query.addBindValue(QString::fromStdString(course.name));
     query.addBindValue(QString::fromStdString(course.teacher));
+    query.addBindValue(course.semester);  // NEW: Add semester field
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Lectures)));
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Tirgulim)));
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.labs)));
@@ -136,7 +138,7 @@ vector<Course> DatabaseCourseManager::getAllCourses() {
     }
 
     QSqlQuery query(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
         FROM course ORDER BY course_file_id
     )", db);
 
@@ -157,7 +159,7 @@ Course DatabaseCourseManager::getCourseById(int id) {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
         FROM course WHERE id = ?
     )");
     query.addBindValue(id);
@@ -180,7 +182,7 @@ vector<Course> DatabaseCourseManager::getCoursesByFileId(int fileId) {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
         FROM course WHERE file_id = ? ORDER BY course_file_id
     )");
     query.addBindValue(fileId);
@@ -209,7 +211,7 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
     for (int fileId : fileIds) {
         QSqlQuery query(db);
         query.prepare(R"(
-            SELECT c.id, c.course_file_id, c.raw_id, c.name, c.teacher, c.lectures_json, c.tutorials_json,
+            SELECT c.id, c.course_file_id, c.raw_id, c.name, c.teacher, c.semester, c.lectures_json, c.tutorials_json,
                    c.labs_json, c.blocks_json, c.file_id, f.file_name, f.upload_time
             FROM course c
             JOIN file f ON c.file_id = f.id
@@ -227,8 +229,8 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
         int courseCount = 0;
         while (query.next()) {
             Course course = createCourseFromQuery(query);
-            string fileName = query.value(10).toString().toStdString();
-            QDateTime uploadTime = query.value(11).toDateTime();
+            string fileName = query.value(11).toString().toStdString();  // Adjusted index
+            QDateTime uploadTime = query.value(12).toDateTime();         // Adjusted index
 
             CourseConflictInfo conflictInfo;
             conflictInfo.course = course;
@@ -284,10 +286,11 @@ Course DatabaseCourseManager::createCourseFromQuery(QSqlQuery& query) {
     course.raw_id = query.value(2).toString().toStdString();
     course.name = query.value(3).toString().toStdString();
     course.teacher = query.value(4).toString().toStdString();
-    course.Lectures = DatabaseJsonHelpers::groupsFromJson(query.value(5).toString().toStdString());
-    course.Tirgulim = DatabaseJsonHelpers::groupsFromJson(query.value(6).toString().toStdString());
-    course.labs = DatabaseJsonHelpers::groupsFromJson(query.value(7).toString().toStdString());
-    course.blocks = DatabaseJsonHelpers::groupsFromJson(query.value(8).toString().toStdString());
+    course.semester = query.value(5).toInt();  // NEW: Read semester field
+    course.Lectures = DatabaseJsonHelpers::groupsFromJson(query.value(6).toString().toStdString());
+    course.Tirgulim = DatabaseJsonHelpers::groupsFromJson(query.value(7).toString().toStdString());
+    course.labs = DatabaseJsonHelpers::groupsFromJson(query.value(8).toString().toStdString());
+    course.blocks = DatabaseJsonHelpers::groupsFromJson(query.value(9).toString().toStdString());
 
     return course;
 }
