@@ -628,20 +628,6 @@ Rectangle {
 
         // Send message to model through controller
         if (controller) {
-            // Add a timeout for the request
-            var timeoutTimer = Qt.createQmlObject('import QtQuick 2.15; Timer {}', chatBot)
-            timeoutTimer.interval = 30000 // 30 seconds timeout
-            timeoutTimer.repeat = false
-            timeoutTimer.triggered.connect(function() {
-                if (isProcessing) {
-                    hideTypingIndicator()
-                    addBotResponse("⏱️ Request timed out. Please try again with a simpler query.", false)
-                    isProcessing = false
-                }
-                timeoutTimer.destroy()
-            })
-            timeoutTimer.start()
-
             controller.processBotMessage(messageText)
         } else {
             // Fallback if controller is not available

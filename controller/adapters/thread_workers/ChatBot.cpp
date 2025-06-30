@@ -31,20 +31,11 @@ void BotWorker::processMessage() {
 }
 
 void BotWorker::processBotQuery() {
-    qDebug() << "BotWorker: Processing new bot query format";
-    qDebug() << "User message:" << QString::fromStdString(m_queryRequest.userMessage);
-    qDebug() << "Available schedules:" << m_queryRequest.availableScheduleIds.size();
-
     // Send to model using new BOT_QUERY_SCHEDULES operation
     void* result = m_model->executeOperation(ModelOperation::BOT_QUERY_SCHEDULES, &m_queryRequest, "");
 
     if (result) {
         auto* response = static_cast<BotQueryResponse*>(result);
-
-        qDebug() << "BotWorker: Received bot query response";
-        qDebug() << "User message:" << QString::fromStdString(response->userMessage);
-        qDebug() << "Is filter query:" << response->isFilterQuery;
-        qDebug() << "Has error:" << response->hasError;
 
         // Emit the structured response
         emit responseReady(*response);
@@ -71,18 +62,14 @@ BotQueryResponse BotWorker::parseLegacyResponse(const std::vector<std::string>& 
 
     if (!responseVector.empty()) {
         response.userMessage = responseVector[0];
-        response.isFilterQuery = false;  // Legacy responses are not filter queries
+        response.isFilterQuery = false;
         response.hasError = false;
 
-        // Check if there's a schedule index (legacy FIND functionality)
         if (responseVector.size() >= 2) {
             const std::string& indexStr = responseVector[1];
             if (!indexStr.empty() && indexStr != "-1") {
                 try {
                     int scheduleIndex = std::stoi(indexStr);
-                    // For legacy compatibility, we could set isFilterQuery = true
-                    // and create a simple ID-based query, but this is not needed
-                    // since the legacy behavior is handled separately
                 } catch (const std::exception&) {
                     // Invalid index, ignore
                 }

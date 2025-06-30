@@ -232,12 +232,6 @@ bool DatabaseSchema::createScheduleTable() {
 bool DatabaseSchema::createScheduleIndexes() {
     bool success = true;
 
-    // Existing indexes
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_set_id ON schedule(schedule_set_id)")) {
-        Logger::get().logWarning("Failed to create schedule set_id index");
-        success = false;
-    }
-
     if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_index ON schedule(schedule_index)")) {
         Logger::get().logWarning("Failed to create schedule index index");
         success = false;
@@ -247,8 +241,6 @@ bool DatabaseSchema::createScheduleIndexes() {
         Logger::get().logWarning("Failed to create schedule created_at index");
         success = false;
     }
-
-    // NEW: Comprehensive indexes for common query patterns
 
     // Time-based queries
     if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_time_range ON schedule(earliest_start, latest_end)")) {

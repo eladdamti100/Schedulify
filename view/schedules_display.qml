@@ -94,7 +94,6 @@ Page {
     Connections {
         target: controller
         function onSchedulesFiltered(filteredCount, totalCount) {
-            console.log("Schedules filtered:", filteredCount, "of", totalCount)
         }
     }
 
