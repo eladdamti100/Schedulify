@@ -2,25 +2,8 @@
 
 SchedulesDisplayController::SchedulesDisplayController(QObject *parent)
         : ControllerManager(parent),
-          m_scheduleModel(new ScheduleModel(this)),
-          m_currentSemester("A"),
-          m_allSemestersLoaded(false) {
+          m_scheduleModel(new ScheduleModel(this)) {
     modelConnection = ModelAccess::getModel();
-
-    // Initialize semester vectors
-    m_schedulesA.clear();
-    m_schedulesB.clear();
-    m_schedulesSummer.clear();
-
-    // Initialize loading states - all semesters start as not loading and not finished
-    m_semesterLoadingState["A"] = false;
-    m_semesterLoadingState["B"] = false;
-    m_semesterLoadingState["SUMMER"] = false;
-
-    m_semesterFinishedState["A"] = false;
-    m_semesterFinishedState["B"] = false;
-    m_semesterFinishedState["SUMMER"] = false;
-
 
     // Initialize sort key mapping for better organization
     m_sortKeyMap["amount_days"] = "Days";
@@ -42,22 +25,156 @@ SchedulesDisplayController::~SchedulesDisplayController() {
     modelConnection = nullptr;
 }
 
-// initiate loading
+// initiate data and semester management
 
-void SchedulesDisplayController::loadScheduleData(const std::vector<InformativeSchedule> &schedules) {
-    // For backward compatibility, load into Semester A
-    m_schedulesA = schedules;
-    m_currentSemester = "A";
-    m_scheduleModel->loadSchedules(m_schedulesA);
-    m_schedules = schedules;
-    m_scheduleModel->loadSchedules(m_schedules);
-    m_scheduleModel->setCurrentScheduleIndex(0);
+void SchedulesDisplayController::loadSemesterScheduleData(const QString& semester, const std::vector<InformativeSchedule>& schedules) {
+    if (semester == "A") {
+        m_schedulesA = schedules;
+        // If this is the first semester loaded, set it as current and update display
+        if (m_currentSemester == "A") {
+            m_scheduleModel->loadSchedules(m_schedulesA);
+        }
+    } else if (semester == "B") {
+        m_schedulesB = schedules;
+    } else if (semester == "SUMMER") {
+        m_schedulesSummer = schedules;
+    }
+
+    // Mark semester as finished loading
+    setSemesterFinished(semester, true);
+    setSemesterLoading(semester, false);
+
+    emit semesterSchedulesLoaded(semester);
 }
 
-void SchedulesDisplayController::goBack() {
-    modelConnection->executeOperation(ModelOperation::CLEAN_SCHEDULES, nullptr, "");
-    m_scheduleModel->setCurrentScheduleIndex(0);
-    emit navigateBack();
+void SchedulesDisplayController::switchToSemester(const QString& semester) {
+    if (m_currentSemester == semester) {
+        return; // Already on this semester
+    }
+
+    // Check if the semester can be clicked (has finished loading)
+    if (!canClickSemester(semester)) {
+        qWarning() << "Semester" << semester << "is not ready to be clicked yet";
+        return;
+    }
+
+    m_currentSemester = semester;
+
+    // Load the appropriate schedules into the model
+    if (semester == "A") {
+        m_scheduleModel->loadSchedules(m_schedulesA);
+    } else if (semester == "B") {
+        m_scheduleModel->loadSchedules(m_schedulesB);
+    } else if (semester == "SUMMER") {
+        m_scheduleModel->loadSchedules(m_schedulesSummer);
+    }
+
+    emit currentSemesterChanged();
+}
+
+void SchedulesDisplayController::allSemestersGenerated() {
+    m_allSemestersLoaded = true;
+    emit allSemestersReady();
+}
+
+void SchedulesDisplayController::resetToSemesterA() {
+    m_currentSemester = "A";
+    // If Semester A has schedules, load them into the model
+    if (!m_schedulesA.empty()) {
+        m_scheduleModel->loadSchedules(m_schedulesA);
+    }
+    emit currentSemesterChanged();
+}
+
+bool SchedulesDisplayController::hasSchedulesForSemester(const QString& semester) const {
+    if (semester == "A") {
+        return !m_schedulesA.empty();
+    } else if (semester == "B") {
+        return !m_schedulesB.empty();
+    } else if (semester == "SUMMER") {
+        return !m_schedulesSummer.empty();
+    }
+    return false;
+}
+
+bool SchedulesDisplayController::isSemesterLoading(const QString& semester) const {
+    return m_semesterLoadingState.value(semester, false);
+}
+
+bool SchedulesDisplayController::isSemesterFinished(const QString& semester) const {
+    return m_semesterFinishedState.value(semester, false);
+}
+
+bool SchedulesDisplayController::canClickSemester(const QString& semester) const {
+    return isSemesterFinished(semester) && !isSemesterLoading(semester) && hasSchedulesForSemester(semester);
+}
+
+void SchedulesDisplayController::setSemesterLoading(const QString& semester, bool loading) {
+    if (m_semesterLoadingState.value(semester, false) != loading) {
+        m_semesterLoadingState[semester] = loading;
+        emit semesterLoadingStateChanged(semester);
+    }
+}
+
+void SchedulesDisplayController::setSemesterFinished(const QString& semester, bool finished) {
+    if (m_semesterFinishedState.value(semester, false) != finished) {
+        m_semesterFinishedState[semester] = finished;
+        emit semesterFinishedStateChanged(semester);
+    }
+}
+
+int SchedulesDisplayController::getScheduleCountForSemester(const QString& semester) const {
+    if (semester == "A") {
+        return static_cast<int>(m_schedulesA.size());
+    } else if (semester == "B") {
+        return static_cast<int>(m_schedulesB.size());
+    } else if (semester == "SUMMER") {
+        return static_cast<int>(m_schedulesSummer.size());
+    }
+    return 0;
+}
+
+std::vector<InformativeSchedule>* SchedulesDisplayController::getCurrentScheduleVector() {
+    if (m_currentSemester == "A") {
+        return &m_schedulesA;
+    } else if (m_currentSemester == "B") {
+        return &m_schedulesB;
+    } else if (m_currentSemester == "SUMMER") {
+        return &m_schedulesSummer;
+    }
+    return nullptr;
+}
+
+void SchedulesDisplayController::clearAllSchedules() {
+    // Clear all semester schedule vectors
+    m_schedulesA.clear();
+    m_schedulesB.clear();
+    m_schedulesSummer.clear();
+
+    // Reset all loading and finished states
+    m_semesterLoadingState["A"] = false;
+    m_semesterLoadingState["B"] = false;
+    m_semesterLoadingState["SUMMER"] = false;
+
+    m_semesterFinishedState["A"] = false;
+    m_semesterFinishedState["B"] = false;
+    m_semesterFinishedState["SUMMER"] = false;
+
+    // Clear the current display
+    m_scheduleModel->loadSchedules(std::vector<InformativeSchedule>());
+
+    // Reset to semester A
+    m_currentSemester = "A";
+    m_allSemestersLoaded = false;
+
+    // Emit signals to update UI
+    emit currentSemesterChanged();
+    emit semesterLoadingStateChanged("A");
+    emit semesterLoadingStateChanged("B");
+    emit semesterLoadingStateChanged("SUMMER");
+    emit semesterFinishedStateChanged("A");
+    emit semesterFinishedStateChanged("B");
+    emit semesterFinishedStateChanged("SUMMER");
 }
 
 // filter assistant
@@ -190,140 +307,6 @@ void SchedulesDisplayController::onScheduleFilterStateChanged() {
 
 // sorting assistant
 
-// Load schedules for a specific semester
-void SchedulesDisplayController::loadSemesterScheduleData(const QString& semester, const std::vector<InformativeSchedule>& schedules) {
-    if (semester == "A") {
-        m_schedulesA = schedules;
-        // If this is the first semester loaded, set it as current and update display
-        if (m_currentSemester == "A") {
-            m_scheduleModel->loadSchedules(m_schedulesA);
-        }
-    } else if (semester == "B") {
-        m_schedulesB = schedules;
-    } else if (semester == "SUMMER") {
-        m_schedulesSummer = schedules;
-    }
-
-    // Mark semester as finished loading
-    setSemesterFinished(semester, true);
-    setSemesterLoading(semester, false);
-
-    emit semesterSchedulesLoaded(semester);
-}
-
-// Switch between semesters
-void SchedulesDisplayController::switchToSemester(const QString& semester) {
-    if (m_currentSemester == semester) {
-        return; // Already on this semester
-    }
-
-    // Check if the semester can be clicked (has finished loading)
-    if (!canClickSemester(semester)) {
-        qWarning() << "Semester" << semester << "is not ready to be clicked yet";
-        return;
-    }
-
-    m_currentSemester = semester;
-
-    // Load the appropriate schedules into the model
-    if (semester == "A") {
-        m_scheduleModel->loadSchedules(m_schedulesA);
-    } else if (semester == "B") {
-        m_scheduleModel->loadSchedules(m_schedulesB);
-    } else if (semester == "SUMMER") {
-        m_scheduleModel->loadSchedules(m_schedulesSummer);
-    }
-
-    emit currentSemesterChanged();
-}
-
-// Called when all semesters are generated
-void SchedulesDisplayController::allSemestersGenerated() {
-    m_allSemestersLoaded = true;
-    emit allSemestersReady();
-}
-
-// Reset to Semester A
-void SchedulesDisplayController::resetToSemesterA() {
-    m_currentSemester = "A";
-    // If Semester A has schedules, load them into the model
-    if (!m_schedulesA.empty()) {
-        m_scheduleModel->loadSchedules(m_schedulesA);
-    }
-    emit currentSemesterChanged();
-}
-
-// Check if a semester has schedules
-bool SchedulesDisplayController::hasSchedulesForSemester(const QString& semester) const {
-    if (semester == "A") {
-        return !m_schedulesA.empty();
-    } else if (semester == "B") {
-        return !m_schedulesB.empty();
-    } else if (semester == "SUMMER") {
-        return !m_schedulesSummer.empty();
-    }
-    return false;
-}
-
-// Check if a semester is currently loading
-bool SchedulesDisplayController::isSemesterLoading(const QString& semester) const {
-    return m_semesterLoadingState.value(semester, false);
-}
-
-// Check if a semester has finished loading
-bool SchedulesDisplayController::isSemesterFinished(const QString& semester) const {
-    return m_semesterFinishedState.value(semester, false);
-}
-
-// Check if a semester button can be clicked
-bool SchedulesDisplayController::canClickSemester(const QString& semester) const {
-    // A semester can be clicked if:
-    // 1. It has finished loading (has schedules)
-    // 2. It's not currently loading
-    return isSemesterFinished(semester) && !isSemesterLoading(semester) && hasSchedulesForSemester(semester);
-}
-
-// Set semester loading state
-void SchedulesDisplayController::setSemesterLoading(const QString& semester, bool loading) {
-    if (m_semesterLoadingState.value(semester, false) != loading) {
-        m_semesterLoadingState[semester] = loading;
-        emit semesterLoadingStateChanged(semester);
-    }
-}
-
-// Set semester finished state
-void SchedulesDisplayController::setSemesterFinished(const QString& semester, bool finished) {
-    if (m_semesterFinishedState.value(semester, false) != finished) {
-        m_semesterFinishedState[semester] = finished;
-        emit semesterFinishedStateChanged(semester);
-    }
-}
-
-// Get schedule count for a semester
-int SchedulesDisplayController::getScheduleCountForSemester(const QString& semester) const {
-    if (semester == "A") {
-        return static_cast<int>(m_schedulesA.size());
-    } else if (semester == "B") {
-        return static_cast<int>(m_schedulesB.size());
-    } else if (semester == "SUMMER") {
-        return static_cast<int>(m_schedulesSummer.size());
-    }
-    return 0;
-}
-
-// Get current schedule vector
-std::vector<InformativeSchedule>* SchedulesDisplayController::getCurrentScheduleVector() {
-    if (m_currentSemester == "A") {
-        return &m_schedulesA;
-    } else if (m_currentSemester == "B") {
-        return &m_schedulesB;
-    } else if (m_currentSemester == "SUMMER") {
-        return &m_schedulesSummer;
-    }
-    return nullptr;
-}
-
-// Apply sorting to current semester
 void SchedulesDisplayController::applySorting(const QVariantMap& sortData) {
     QString sortField;
     bool isAscending = true;
@@ -370,9 +353,6 @@ void SchedulesDisplayController::applySorting(const QVariantMap& sortData) {
             }
         } else if (sortField == "amount_gaps") {
             std::sort(currentSchedules->begin(), currentSchedules->end(), [isAscending](const InformativeSchedule& a, const InformativeSchedule& b) {
-        }
-        else if (sortField == "amount_gaps") {
-            std::sort(m_schedules.begin(), m_schedules.end(), [isAscending](const InformativeSchedule& a, const InformativeSchedule& b) {
                 return isAscending ? a.amount_gaps < b.amount_gaps : a.amount_gaps > b.amount_gaps;
             });
         } else if (sortField == "gaps_time") {
@@ -401,7 +381,6 @@ void SchedulesDisplayController::applySorting(const QVariantMap& sortData) {
     emit schedulesSorted(static_cast<int>(currentSchedules->size()));
 }
 
-// Clear sorting for current semester
 void SchedulesDisplayController::clearSorting() {
     std::vector<InformativeSchedule>* currentSchedules = getCurrentScheduleVector();
     if (!currentSchedules) {
@@ -422,7 +401,6 @@ void SchedulesDisplayController::clearSorting() {
 
 // export menu
 
-// Save CSV for current semester
 void SchedulesDisplayController::saveScheduleAsCSV() {
     std::vector<InformativeSchedule>* currentSchedules = getCurrentScheduleVector();
     if (!currentSchedules || currentSchedules->empty()) {
@@ -430,9 +408,6 @@ void SchedulesDisplayController::saveScheduleAsCSV() {
     }
 
     int currentIndex = m_scheduleModel->currentScheduleIndex();
-    const auto& activeSchedules = m_scheduleModel->getCurrentSchedules();
-
-    if (currentIndex >= 0 && currentIndex < static_cast<int>(activeSchedules.size())) {
     if (currentIndex >= 0 && currentIndex < static_cast<int>(currentSchedules->size())) {
         QString fileName = QFileDialog::getSaveFileName(nullptr,
                                                         "Save Schedule as CSV",
@@ -441,13 +416,11 @@ void SchedulesDisplayController::saveScheduleAsCSV() {
                                                         "CSV Files (*.csv)");
         if (!fileName.isEmpty()) {
             modelConnection->executeOperation(ModelOperation::SAVE_SCHEDULE,
-                                              &activeSchedules[currentIndex], fileName.toLocal8Bit().constData());
                                               &(*currentSchedules)[currentIndex], fileName.toLocal8Bit().constData());
         }
     }
 }
 
-// Print schedule for current semester
 void SchedulesDisplayController::printScheduleDirectly() {
     std::vector<InformativeSchedule>* currentSchedules = getCurrentScheduleVector();
     if (!currentSchedules || currentSchedules->empty()) {
@@ -455,16 +428,11 @@ void SchedulesDisplayController::printScheduleDirectly() {
     }
 
     int currentIndex = m_scheduleModel->currentScheduleIndex();
-    const auto& activeSchedules = m_scheduleModel->getCurrentSchedules();
-
-    if (currentIndex >= 0 && currentIndex < static_cast<int>(activeSchedules.size())) {
-        modelConnection->executeOperation(ModelOperation::PRINT_SCHEDULE, &activeSchedules[currentIndex], "");
     if (currentIndex >= 0 && currentIndex < static_cast<int>(currentSchedules->size())) {
         modelConnection->executeOperation(ModelOperation::PRINT_SCHEDULE, &(*currentSchedules)[currentIndex], "");
     }
 }
 
-// Capture screenshot with semester in filename
 void SchedulesDisplayController::captureAndSave(QQuickItem* item, const QString& savePath) {
     if (!item) {
         emit screenshotFailed();
@@ -503,7 +471,6 @@ void SchedulesDisplayController::captureAndSave(QQuickItem* item, const QString&
     });
 }
 
-// Generate filename with optional semester suffix
 QString SchedulesDisplayController::generateFilename(const QString& basePath, int index, fileType type, const QString& semester) {
     QString filename;
     QString semesterSuffix = semester.isEmpty() ? "" : QString("_%1").arg(semester);
@@ -523,34 +490,11 @@ QString SchedulesDisplayController::generateFilename(const QString& basePath, in
 
     return QDir(basePath).filePath(filename);
 }
-void SchedulesDisplayController::clearAllSchedules() {
-    // Clear all semester schedule vectors
-    m_schedulesA.clear();
-    m_schedulesB.clear();
-    m_schedulesSummer.clear();
 
-    // Reset all loading and finished states
-    m_semesterLoadingState["A"] = false;
-    m_semesterLoadingState["B"] = false;
-    m_semesterLoadingState["SUMMER"] = false;
+// navigate back
 
-    m_semesterFinishedState["A"] = false;
-    m_semesterFinishedState["B"] = false;
-    m_semesterFinishedState["SUMMER"] = false;
-
-    // Clear the current display
-    m_scheduleModel->loadSchedules(std::vector<InformativeSchedule>());
-
-    // Reset to semester A
-    m_currentSemester = "A";
-    m_allSemestersLoaded = false;
-
-    // Emit signals to update UI
-    emit currentSemesterChanged();
-    emit semesterLoadingStateChanged("A");
-    emit semesterLoadingStateChanged("B");
-    emit semesterLoadingStateChanged("SUMMER");
-    emit semesterFinishedStateChanged("A");
-    emit semesterFinishedStateChanged("B");
-    emit semesterFinishedStateChanged("SUMMER");
+void SchedulesDisplayController::goBack() {
+    modelConnection->executeOperation(ModelOperation::CLEAN_SCHEDULES, nullptr, "");
+    m_scheduleModel->setCurrentScheduleIndex(0);
+    emit navigateBack();
 }

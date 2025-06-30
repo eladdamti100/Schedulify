@@ -744,127 +744,135 @@ Page {
                             Layout.fillWidth: true
                         }
 
-                        // Semester Toggle
-                        Rectangle {
-                            id: semesterToggle
-                            Layout.preferredWidth: 200
-                            Layout.preferredHeight: 32
-                            radius: 4
-                            border.color: "#e5e7eb"
-                            border.width: 1
-                            color: "#f9fafb"
-
-                            Row {
-                                anchors.fill: parent
-                                spacing: 0
-
-                                Rectangle {
-                                    id: allSemesterButton
-                                    width: parent.width / 4
-                                    height: parent.height
-                                    radius: 4
-                                    color: selectedSemester === "ALL" ? "#3b82f6" : "transparent"
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "ALL"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        color: selectedSemester === "ALL" ? "#ffffff" : "#6b7280"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            selectedSemester = "ALL"
-                                            if (courseSelectionController) {
-                                                courseSelectionController.filterBySemester("ALL")
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    id: semesterAButton
-                                    width: parent.width / 4
-                                    height: parent.height
-                                    color: selectedSemester === "A" ? "#3b82f6" : "transparent"
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "SEM A"
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        color: selectedSemester === "A" ? "#ffffff" : "#6b7280"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            selectedSemester = "A"
-                                            if (courseSelectionController) {
-                                                courseSelectionController.filterBySemester("A")
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    id: semesterBButton
-                                    width: parent.width / 4
-                                    height: parent.height
-                                    color: selectedSemester === "B" ? "#3b82f6" : "transparent"
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "SEM B"
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        color: selectedSemester === "B" ? "#ffffff" : "#6b7280"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            selectedSemester = "B"
-                                            if (courseSelectionController) {
-                                                courseSelectionController.filterBySemester("B")
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    id: summerSemesterButton
-                                    width: parent.width / 4
-                                    height: parent.height
-                                    radius: 4
-                                    color: selectedSemester === "SUMMER" ? "#3b82f6" : "transparent"
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "SUMMER"
-                                        font.pixelSize: 8
-                                        font.bold: true
-                                        color: selectedSemester === "SUMMER" ? "#ffffff" : "#6b7280"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            selectedSemester = "SUMMER"
-                                            if (courseSelectionController) {
-                                                courseSelectionController.filterBySemester("SUMMER")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // // Semester Toggle
+                        // Rectangle {
+                        //     id: semesterToggle
+                        //     Layout.preferredWidth: 200
+                        //     Layout.preferredHeight: 32
+                        //     radius: 4
+                        //     border.color: "#374151"
+                        //     border.width: 1
+                        //     color: "#1f2937"
+                        //
+                        //     Row {
+                        //         anchors.fill: parent
+                        //         spacing: 0
+                        //
+                        //         Rectangle {
+                        //             id: allSemesterButton
+                        //             width: parent.width / 4
+                        //             height: parent.height
+                        //             radius: 4
+                        //             color: selectedSemester === "ALL" ? "#3b82f6" : (allMouseArea.containsMouse ? "#374151" : "transparent")
+                        //
+                        //             Text {
+                        //                 anchors.centerIn: parent
+                        //                 text: "ALL"
+                        //                 font.pixelSize: 10
+                        //                 font.bold: true
+                        //                 color: selectedSemester === "ALL" ? "#ffffff" : "#d1d5db"
+                        //             }
+                        //
+                        //             MouseArea {
+                        //                 id: allMouseArea
+                        //                 anchors.fill: parent
+                        //                 cursorShape: Qt.PointingHandCursor
+                        //                 hoverEnabled: true
+                        //                 onClicked: {
+                        //                     selectedSemester = "ALL"
+                        //                     if (courseSelectionController) {
+                        //                         courseSelectionController.filterBySemester("ALL")
+                        //                     }
+                        //                 }
+                        //             }
+                        //         }
+                        //
+                        //         Rectangle {
+                        //             id: semesterAButton
+                        //             width: parent.width / 4
+                        //             height: parent.height
+                        //             color: selectedSemester === "A" ? "#3b82f6" : (aMouseArea.containsMouse ? "#374151" : "transparent")
+                        //
+                        //             Text {
+                        //                 anchors.centerIn: parent
+                        //                 text: "SEM A"
+                        //                 font.pixelSize: 9
+                        //                 font.bold: true
+                        //                 color: selectedSemester === "A" ? "#ffffff" : "#d1d5db"
+                        //             }
+                        //
+                        //             MouseArea {
+                        //                 id: aMouseArea
+                        //                 anchors.fill: parent
+                        //                 cursorShape: Qt.PointingHandCursor
+                        //                 hoverEnabled: true
+                        //                 onClicked: {
+                        //                     selectedSemester = "A"
+                        //                     if (courseSelectionController) {
+                        //                         courseSelectionController.filterBySemester("A")
+                        //                     }
+                        //                 }
+                        //             }
+                        //         }
+                        //
+                        //         Rectangle {
+                        //             id: semesterBButton
+                        //             width: parent.width / 4
+                        //             height: parent.height
+                        //             color: selectedSemester === "B" ? "#3b82f6" : (bMouseArea.containsMouse ? "#374151" : "transparent")
+                        //
+                        //             Text {
+                        //                 anchors.centerIn: parent
+                        //                 text: "SEM B"
+                        //                 font.pixelSize: 9
+                        //                 font.bold: true
+                        //                 color: selectedSemester === "B" ? "#ffffff" : "#d1d5db"
+                        //             }
+                        //
+                        //             MouseArea {
+                        //                 id: bMouseArea
+                        //                 anchors.fill: parent
+                        //                 cursorShape: Qt.PointingHandCursor
+                        //                 hoverEnabled: true
+                        //                 onClicked: {
+                        //                     selectedSemester = "B"
+                        //                     if (courseSelectionController) {
+                        //                         courseSelectionController.filterBySemester("B")
+                        //                     }
+                        //                 }
+                        //             }
+                        //         }
+                        //
+                        //         Rectangle {
+                        //             id: summerSemesterButton
+                        //             width: parent.width / 4
+                        //             height: parent.height
+                        //             radius: 4
+                        //             color: selectedSemester === "SUMMER" ? "#3b82f6" : (summerMouseArea.containsMouse ? "#374151" : "transparent")
+                        //
+                        //             Text {
+                        //                 anchors.centerIn: parent
+                        //                 text: "SUMMER"
+                        //                 font.pixelSize: 8
+                        //                 font.bold: true
+                        //                 color: selectedSemester === "SUMMER" ? "#ffffff" : "#d1d5db"
+                        //             }
+                        //
+                        //             MouseArea {
+                        //                 id: summerMouseArea
+                        //                 anchors.fill: parent
+                        //                 cursorShape: Qt.PointingHandCursor
+                        //                 hoverEnabled: true
+                        //                 onClicked: {
+                        //                     selectedSemester = "SUMMER"
+                        //                     if (courseSelectionController) {
+                        //                         courseSelectionController.filterBySemester("SUMMER")
+                        //                     }
+                        //                 }
+                        //             }
+                        //         }
+                        //     }
+                        // }
 
                         Button {
                             id: createCourseButton
@@ -990,24 +998,160 @@ Page {
                         }
                     }
 
-                    Label {
-                        id: searchHelpText
+                    RowLayout {
+                        id: selectSemester
                         anchors {
                             top: searchBar.bottom
                             topMargin: 16
                             left: parent.left
                             right: parent.right
                         }
-                        height: 20
-                        text: "Click on a course to select it for your schedule"
-                        color: "#6b7280"
+                        height: 30
+
+                        Label {
+                            id: searchHelpText
+                            height: 20
+                            text: "Click on a course to select it for your schedule"
+                            color: "#6b7280"
+                            Layout.fillWidth: true
+                        }
+
+                        // Semester Toggle
+                        Rectangle {
+                            id: semesterToggle
+                            Layout.preferredWidth: 200
+                            Layout.preferredHeight: 32
+                            radius: 4
+                            border.color: "#374151"
+                            border.width: 1
+                            color: "#1f2937"
+
+                            Row {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Rectangle {
+                                    id: allSemesterButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    radius: 4
+                                    color: selectedSemester === "ALL" ? "#3b82f6" : (allMouseArea.containsMouse ? "#374151" : "transparent")
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "ALL"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: selectedSemester === "ALL" ? "#ffffff" : "#d1d5db"
+                                    }
+
+                                    MouseArea {
+                                        id: allMouseArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            selectedSemester = "ALL"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("ALL")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: semesterAButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    color: selectedSemester === "A" ? "#3b82f6" : (aMouseArea.containsMouse ? "#374151" : "transparent")
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SEM A"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: selectedSemester === "A" ? "#ffffff" : "#d1d5db"
+                                    }
+
+                                    MouseArea {
+                                        id: aMouseArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            selectedSemester = "A"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("A")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: semesterBButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    color: selectedSemester === "B" ? "#3b82f6" : (bMouseArea.containsMouse ? "#374151" : "transparent")
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SEM B"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: selectedSemester === "B" ? "#ffffff" : "#d1d5db"
+                                    }
+
+                                    MouseArea {
+                                        id: bMouseArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            selectedSemester = "B"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("B")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: summerSemesterButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    radius: 4
+                                    color: selectedSemester === "SUMMER" ? "#3b82f6" : (summerMouseArea.containsMouse ? "#374151" : "transparent")
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SUMMER"
+                                        font.pixelSize: 8
+                                        font.bold: true
+                                        color: selectedSemester === "SUMMER" ? "#ffffff" : "#d1d5db"
+                                    }
+
+                                    MouseArea {
+                                        id: summerMouseArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            selectedSemester = "SUMMER"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("SUMMER")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // courses
                     ListView {
                         id: courseListView
                         anchors {
-                            top: searchHelpText.bottom
+                            top: selectSemester.bottom
                             topMargin: 16
                             left: parent.left
                             right: parent.right

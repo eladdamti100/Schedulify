@@ -22,6 +22,7 @@ enum class SessionType {
     UNSUPPORTED
 
 };
+
 class Session {
 public:
     int day_of_week;
@@ -159,23 +160,6 @@ enum class ModelOperation {
     GET_FILE_HISTORY,
     DELETE_FILE_FROM_HISTORY,
     CLEAN_SCHEDULES
-};
-
-struct ScheduleFilterData {
-    int maxDays = -1;
-    int maxGaps = -1;
-    int maxGapTime = -1;
-    int minAvgStart = -1;
-    int maxAvgStart = -1;
-    int minAvgEnd = -1;
-    int maxAvgEnd = -1;
-    int setId = -1;
-
-    ScheduleFilterData() = default;
-
-    ScheduleFilterData(int maxD, int maxG, int maxGT, int minAS, int maxAS, int minAE, int maxAE)
-            : maxDays(maxD), maxGaps(maxG), maxGapTime(maxGT),
-              minAvgStart(minAS), maxAvgStart(maxAS), minAvgEnd(minAE), maxAvgEnd(maxAE) {}
 };
 
 class IModel {

@@ -31,21 +31,15 @@ class SchedulesDisplayController : public ControllerManager {
 Q_OBJECT
     Q_PROPERTY(ScheduleModel* scheduleModel READ scheduleModel CONSTANT)
     Q_PROPERTY(bool isFiltered READ isFiltered NOTIFY filterStateChanged)
-Q_OBJECT
-    Q_PROPERTY(ScheduleModel* scheduleModel READ scheduleModel CONSTANT)
 
 public:
     explicit SchedulesDisplayController(QObject *parent = nullptr);
     ~SchedulesDisplayController() override;
 
-    void loadScheduleData(const std::vector<InformativeSchedule>& schedules);
-
-    // Semester-specific loading and switching
-    Q_INVOKABLE void loadSemesterScheduleData(const QString& semester, const std::vector<InformativeSchedule>& schedules);
+    Q_INVOKABLE void loadSemesterScheduleData(const QString& semester, const vector<InformativeSchedule>& schedules);
     Q_INVOKABLE void switchToSemester(const QString& semester);
     Q_INVOKABLE void allSemestersGenerated();
 
-    // Reset to default semester
     Q_INVOKABLE void resetToSemesterA();
 
     // Properties
@@ -61,6 +55,9 @@ public:
     Q_INVOKABLE bool isSemesterLoading(const QString& semester) const;
     Q_INVOKABLE bool isSemesterFinished(const QString& semester) const;
     Q_INVOKABLE bool canClickSemester(const QString& semester) const;
+    void setSemesterLoading(const QString& semester, bool loading);
+    void setSemesterFinished(const QString& semester, bool finished);
+    void clearAllSchedules();
 
     // QML accessible methods
     Q_INVOKABLE void goBack() override;
@@ -75,33 +72,23 @@ public:
     // Filter methods
     Q_INVOKABLE void resetFilters();
 
-    // Bot message processing - completely rewritten
+    // Bot message processing
     Q_INVOKABLE void processBotMessage(const QString& userMessage);
 
-    static QString generateFilename(const QString& basePath, int index, fileType type);
-    // Include semester in filename
     static QString generateFilename(const QString& basePath, int index, fileType type, const QString& semester = "");
 
-    // Methods to be called from CourseSelectionController
-    void setSemesterLoading(const QString& semester, bool loading);
-    void setSemesterFinished(const QString& semester, bool finished);
-    void clearAllSchedules();
-
-
 signals:
+    // sort signals
     void schedulesSorted(int totalCount);
+
+    // screenshot signals
     void screenshotSaved(const QString& path);
     void screenshotFailed();
+
+    // filter bot signals
     void botResponseReceived(const QString& response);
     void filterStateChanged();
     void schedulesFiltered(int filteredCount, int totalCount);
-
-private slots:
-    void onScheduleFilterStateChanged();
-signals:
-    void schedulesSorted(int totalCount);
-    void screenshotSaved(const QString& path);
-    void screenshotFailed();
 
     // Semester-specific signals
     void currentSemesterChanged();
@@ -112,34 +99,36 @@ signals:
     void semesterLoadingStateChanged(const QString& semester);
     void semesterFinishedStateChanged(const QString& semester);
 
+private slots:
+    void onScheduleFilterStateChanged();
+
 private:
+    // schedule model properties
+    ScheduleModel* m_scheduleModel;
+    IModel* modelConnection;
+
     // Per-semester schedule storage
-    std::vector<InformativeSchedule> m_schedulesA;
-    std::vector<InformativeSchedule> m_schedulesB;
-    std::vector<InformativeSchedule> m_schedulesSummer;
+    vector<InformativeSchedule> m_schedulesA;
+    vector<InformativeSchedule> m_schedulesB;
+    vector<InformativeSchedule> m_schedulesSummer;
 
     // Semester management properties
-    QString m_currentSemester = "A"; // Track which semester is currently being displayed
+    QString m_currentSemester = "A";
     bool m_allSemestersLoaded = false;
 
     // Loading state tracking
-    QMap<QString, bool> m_semesterLoadingState;  // Track if semester is currently loading
-    QMap<QString, bool> m_semesterFinishedState; // Track if semester has finished loading
+    QMap<QString, bool> m_semesterLoadingState;
+    QMap<QString, bool> m_semesterFinishedState;
 
-    ScheduleModel* m_scheduleModel;
-    IModel* modelConnection;
+    // sort properties
     QMap<QString, QString> m_sortKeyMap;
-
-    // Track current sort state for optimization
     QString m_currentSortField;
     bool m_currentSortAscending = true;
 
-    // Helper methods for bot
+    // Helper methods
     BotQueryRequest createBotQueryRequest(const QString& userMessage);
     void handleBotResponse(const BotQueryResponse& response);
-
-    // Helper methods
-    std::vector<InformativeSchedule>* getCurrentScheduleVector();
+    vector<InformativeSchedule>* getCurrentScheduleVector();
 };
 
 #endif // SCHEDULES_DISPLAY_H
