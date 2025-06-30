@@ -998,6 +998,7 @@ Page {
                         }
                     }
 
+                    // Semester Toggle
                     RowLayout {
                         id: selectSemester
                         anchors {
@@ -1006,25 +1007,22 @@ Page {
                             left: parent.left
                             right: parent.right
                         }
-                        height: 30
+                        height: 40
 
-                        Label {
-                            id: searchHelpText
-                            height: 20
-                            text: "Click on a course to select it for your schedule"
-                            color: "#6b7280"
+                        // Spacer to center the toggle
+                        Item {
                             Layout.fillWidth: true
                         }
 
                         // Semester Toggle
                         Rectangle {
                             id: semesterToggle
-                            Layout.preferredWidth: 200
-                            Layout.preferredHeight: 32
-                            radius: 4
-                            border.color: "#374151"
+                            Layout.preferredWidth: 320
+                            Layout.preferredHeight: 40
+                            radius: 6
+                            border.color: "#d1d5db"
                             border.width: 1
-                            color: "#1f2937"
+                            color: "#f9fafb"
 
                             Row {
                                 anchors.fill: parent
@@ -1034,15 +1032,17 @@ Page {
                                     id: allSemesterButton
                                     width: parent.width / 4
                                     height: parent.height
-                                    radius: 4
-                                    color: selectedSemester === "ALL" ? "#3b82f6" : (allMouseArea.containsMouse ? "#374151" : "transparent")
+                                    radius: 6
+                                    color: selectedSemester === "ALL" ? "#3b82f6" : (allMouseArea.containsMouse ? "#f3f4f6" : "transparent")
+                                    border.color: selectedSemester === "ALL" ? "#3b82f6" : "transparent"
+                                    border.width: selectedSemester === "ALL" ? 1 : 0
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "ALL"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 14
                                         font.bold: true
-                                        color: selectedSemester === "ALL" ? "#ffffff" : "#d1d5db"
+                                        color: selectedSemester === "ALL" ? "#ffffff" : "#374151"
                                     }
 
                                     MouseArea {
@@ -1063,14 +1063,17 @@ Page {
                                     id: semesterAButton
                                     width: parent.width / 4
                                     height: parent.height
-                                    color: selectedSemester === "A" ? "#3b82f6" : (aMouseArea.containsMouse ? "#374151" : "transparent")
+                                    radius: 6
+                                    color: selectedSemester === "A" ? "#3b82f6" : (aMouseArea.containsMouse ? "#f3f4f6" : "transparent")
+                                    border.color: selectedSemester === "A" ? "#3b82f6" : "transparent"
+                                    border.width: selectedSemester === "A" ? 1 : 0
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "SEM A"
-                                        font.pixelSize: 9
+                                        font.pixelSize: 13
                                         font.bold: true
-                                        color: selectedSemester === "A" ? "#ffffff" : "#d1d5db"
+                                        color: selectedSemester === "A" ? "#ffffff" : "#374151"
                                     }
 
                                     MouseArea {
@@ -1091,14 +1094,17 @@ Page {
                                     id: semesterBButton
                                     width: parent.width / 4
                                     height: parent.height
-                                    color: selectedSemester === "B" ? "#3b82f6" : (bMouseArea.containsMouse ? "#374151" : "transparent")
+                                    radius: 6
+                                    color: selectedSemester === "B" ? "#3b82f6" : (bMouseArea.containsMouse ? "#f3f4f6" : "transparent")
+                                    border.color: selectedSemester === "B" ? "#3b82f6" : "transparent"
+                                    border.width: selectedSemester === "B" ? 1 : 0
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "SEM B"
-                                        font.pixelSize: 9
+                                        font.pixelSize: 13
                                         font.bold: true
-                                        color: selectedSemester === "B" ? "#ffffff" : "#d1d5db"
+                                        color: selectedSemester === "B" ? "#ffffff" : "#374151"
                                     }
 
                                     MouseArea {
@@ -1119,15 +1125,17 @@ Page {
                                     id: summerSemesterButton
                                     width: parent.width / 4
                                     height: parent.height
-                                    radius: 4
-                                    color: selectedSemester === "SUMMER" ? "#3b82f6" : (summerMouseArea.containsMouse ? "#374151" : "transparent")
+                                    radius: 6
+                                    color: selectedSemester === "SUMMER" ? "#3b82f6" : (summerMouseArea.containsMouse ? "#f3f4f6" : "transparent")
+                                    border.color: selectedSemester === "SUMMER" ? "#3b82f6" : "transparent"
+                                    border.width: selectedSemester === "SUMMER" ? 1 : 0
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "SUMMER"
-                                        font.pixelSize: 8
+                                        font.pixelSize: 11
                                         font.bold: true
-                                        color: selectedSemester === "SUMMER" ? "#ffffff" : "#d1d5db"
+                                        color: selectedSemester === "SUMMER" ? "#ffffff" : "#374151"
                                     }
 
                                     MouseArea {
@@ -1144,6 +1152,11 @@ Page {
                                     }
                                 }
                             }
+                        }
+
+                        // Spacer to center the toggle
+                        Item {
+                            Layout.fillWidth: true
                         }
                     }
 
@@ -1195,18 +1208,24 @@ Page {
                                         courseDelegate.opacity = 1
                                         courseIdBox.color = "#dbeafe"
                                         courseIdBoxLabel.color = "#2563eb"
+                                        semesterBadge.color = "#f3f4f6"
+                                        semesterBadgeLabel.color = "#4b5563"
                                     } else if (!canAddCourseToSemester(originalIndex)) {
                                         courseDelegate.color = "#e5e7eb"
                                         courseDelegate.border.color = "#d1d5db"
                                         courseDelegate.opacity = 0.7
                                         courseIdBox.color = "#e5e7eb"
                                         courseIdBoxLabel.color = "#9ca3af"
+                                        semesterBadge.color = "#e5e7eb"
+                                        semesterBadgeLabel.color = "#9ca3af"
                                     } else {
                                         courseDelegate.color = "#ffffff"
                                         courseDelegate.border.color = "#e5e7eb"
                                         courseDelegate.opacity = 1
                                         courseIdBox.color = "#f3f4f6"
                                         courseIdBoxLabel.color = "#4b5563"
+                                        semesterBadge.color = "#f3f4f6"
+                                        semesterBadgeLabel.color = "#4b5563"
                                     }
                                 }
                             }
@@ -1254,12 +1273,51 @@ Page {
                                     }
                                 }
 
+                                // Semester Badge
+                                Rectangle {
+                                    id: semesterBadge
+                                    anchors {
+                                        top: parent.top
+                                        right: parent.right
+                                    }
+                                    width: semesterBadgeLabel.implicitWidth + 12
+                                    height: 20
+                                    radius: 10
+                                    color: {
+                                        if (isCourseSelectedSafe(originalIndex)) {
+                                            return "#f3f4f6"
+                                        } else if (!canAddCourseToSemester(originalIndex)) {
+                                            return "#e5e7eb"
+                                        } else {
+                                            return "#f3f4f6"
+                                        }
+                                    }
+
+                                    Label {
+                                        id: semesterBadgeLabel
+                                        anchors.centerIn: parent
+                                        text: semesterDisplay || "SEM A"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: {
+                                            if (isCourseSelectedSafe(originalIndex)) {
+                                                return "#4b5563"
+                                            } else if (!canAddCourseToSemester(originalIndex)) {
+                                                return "#9ca3af"
+                                            } else {
+                                                return "#4b5563"
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Item {
                                     id: courseInfoColumn
                                     anchors {
                                         left: courseIdBox.right
                                         leftMargin: 16
-                                        right: parent.right
+                                        right: semesterBadge.left
+                                        rightMargin: 8
                                         verticalCenter: parent.verticalCenter
                                     }
                                     height: parent.height
@@ -1385,7 +1443,7 @@ Page {
                                     height: 20
                                     text: "Try a different search term"
                                     font.pixelSize: 14
-                                    color: "#6b7280"
+                                    color: "#9ca3af"
                                     horizontalAlignment: Text.AlignHCenter
                                 }
                             }
@@ -1456,7 +1514,7 @@ Page {
                                     right: parent.right
                                     verticalCenter: parent.verticalCenter
                                 }
-                                width: selectedSemester === "ALL" ? 150 : 60
+                                width: 60
                                 height: 30
                                 radius: 4
                                 color: "#f3f4f6"
@@ -1480,8 +1538,8 @@ Page {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: "A:" + getSelectedCoursesCountBySemester("A") + " B:" + getSelectedCoursesCountBySemester("B") + " S:" + getSelectedCoursesCountBySemester("SUMMER")
-                                        font.pixelSize: 10
+                                        text: (getSelectedCoursesCountBySemester("A") + getSelectedCoursesCountBySemester("B") + getSelectedCoursesCountBySemester("SUMMER")) + "/21"
+                                        font.pixelSize: 14
                                         font.bold: true
                                         color: "#1f2937"
                                     }
