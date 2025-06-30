@@ -69,7 +69,10 @@ public:
     // Performance operations for bulk inserts
     bool insertSchedulesBulk(const vector<InformativeSchedule>& schedules, int setId);
 
+    void debugPrintScheduleData(int limit = 10);
+
 private:
+
     QSqlDatabase& db;
 
     // Helper methods

@@ -8,6 +8,33 @@
 #include "logger.h"
 #include <QUrl>
 
+// !!only add to code when need to reset db!!
+void forceCleanDatabaseStart() {
+    Logger::get().logInfo("=== FORCING CLEAN DATABASE START ===");
+
+    // Find database file location
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString dbPath = QDir(appDataPath).filePath("schedulify.db");
+
+    // Delete existing database file
+    if (QFile::exists(dbPath)) {
+        if (QFile::remove(dbPath)) {
+            Logger::get().logInfo("Existing database file deleted: " + dbPath.toStdString());
+        } else {
+            Logger::get().logWarning("Failed to delete existing database file");
+        }
+    } else {
+        Logger::get().logInfo("No existing database file found");
+    }
+
+    // Also remove any journal/wal files
+    QFile::remove(dbPath + "-wal");
+    QFile::remove(dbPath + "-shm");
+    QFile::remove(dbPath + "-journal");
+
+    Logger::get().logInfo("Database reset complete - will create fresh v1 schema");
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
@@ -21,8 +48,7 @@ int main(int argc, char *argv[])
             Logger::get().logWarning("Database initialization failed - continuing without persistence");
         } else {
             Logger::get().logInfo("Database initialized successfully");
-        }
-        if (dbIntegration.isInitialized()) {
+
             auto& db = DatabaseManager::getInstance();
             if (db.isConnected() && db.schedules()) {
                 Logger::get().logInfo("Schedule database ready for use");

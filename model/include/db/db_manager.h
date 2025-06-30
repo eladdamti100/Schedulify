@@ -82,7 +82,7 @@ private:
     std::unique_ptr<DatabaseFileManager> fileManager;
     std::unique_ptr<DatabaseCourseManager> courseManager;
 
-    static const int CURRENT_SCHEMA_VERSION = 3;
+    static const int CURRENT_SCHEMA_VERSION = 1;
 
     friend class DatabaseRepair;
     std::unique_ptr<DatabaseScheduleManager> scheduleManager;

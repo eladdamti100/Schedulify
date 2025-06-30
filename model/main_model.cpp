@@ -739,25 +739,22 @@ vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userI
 
     Logger::get().logInfo("Generating schedules for " + std::to_string(userInput.size()) + " courses");
 
-    // CHANGE: Always enable progressive writing for database persistence
-    bool enableProgressiveWriting = true; // Changed from: userInput.size() >= 5
+    bool enableProgressiveWriting = true;
 
     ScheduleBuilder builder;
     vector<InformativeSchedule> schedules;
 
-    if (enableProgressiveWriting) {
-        try {
-            auto& dbIntegration = ModelDatabaseIntegration::getInstance();
-            if (!dbIntegration.isInitialized()) {
-                if (!dbIntegration.initializeDatabase()) {
-                    Logger::get().logWarning("Database not available - proceeding without progressive writing");
-                    enableProgressiveWriting = false;
-                }
+    try {
+        auto &dbIntegration = ModelDatabaseIntegration::getInstance();
+        if (!dbIntegration.isInitialized()) {
+            if (!dbIntegration.initializeDatabase()) {
+                Logger::get().logWarning("Database not available - proceeding without progressive writing");
+                enableProgressiveWriting = false;
             }
-        } catch (const std::exception& e) {
-            Logger::get().logWarning("Database error - proceeding without progressive writing: " + string(e.what()));
-            enableProgressiveWriting = false;
         }
+    } catch (const std::exception &e) {
+        Logger::get().logWarning("Database error - proceeding without progressive writing: " + string(e.what()));
+        enableProgressiveWriting = false;
     }
 
     if (enableProgressiveWriting) {
@@ -765,7 +762,6 @@ vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userI
         vector<int> sourceFileIds; // You might want to get actual file IDs here
         schedules = builder.build(userInput, true, setName, sourceFileIds);
 
-        // VERIFY schedules were saved
         auto& db = DatabaseManager::getInstance();
         if (db.isConnected()) {
             int savedCount = db.schedules()->getScheduleCount();
@@ -787,6 +783,7 @@ vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userI
     }
 
     Logger::get().logInfo("Generated " + std::to_string(schedules.size()) + " possible schedules");
+
     return schedules;
 }
 

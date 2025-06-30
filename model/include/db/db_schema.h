@@ -19,7 +19,7 @@ public:
 
     // Schema versioning
     static int getCurrentSchemaVersion() { return CURRENT_SCHEMA_VERSION; }
-    bool upgradeSchema(int fromVersion, int toVersion);
+    static bool upgradeSchema(int fromVersion, int toVersion);
 
     // Validation
     bool validateSchema();
@@ -27,7 +27,7 @@ public:
 
 private:
     QSqlDatabase& db;
-    static const int CURRENT_SCHEMA_VERSION = 3;
+    static const int CURRENT_SCHEMA_VERSION = 1;
 
     // Individual table creation methods
     bool createMetadataTable();

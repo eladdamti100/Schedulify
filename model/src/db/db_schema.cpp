@@ -173,155 +173,16 @@ bool DatabaseSchema::dropAllTables() {
 }
 
 bool DatabaseSchema::upgradeSchema(int fromVersion, int toVersion) {
+    Logger::get().logInfo("Schema upgrade requested from v" + std::to_string(fromVersion) +
+                          " to v" + std::to_string(toVersion));
+
     if (fromVersion == toVersion) {
         return true; // No upgrade needed
     }
 
-    if (fromVersion == 1 && toVersion == 2) {
-        return upgradeFromV1ToV2();
-    }
-
-    // Add new upgrade path for schedule tables
-    if (fromVersion == 2 && toVersion == 3) {
-        return upgradeFromV2ToV3();
-    }
-
-    Logger::get().logError("Unsupported schema upgrade path: " + std::to_string(fromVersion) +
-                           " -> " + std::to_string(toVersion));
+    // For now, we don't support upgrades since we're at v1
+    Logger::get().logError("Schema upgrade not supported yet - please recreate database");
     return false;
-}
-
-bool DatabaseSchema::upgradeFromV1ToV2() {
-    // Check if upload_time column exists in file table
-    QSqlQuery checkQuery("PRAGMA table_info(file)", db);
-    bool hasUploadTime = false;
-
-    while (checkQuery.next()) {
-        QString columnName = checkQuery.value(1).toString();
-        if (columnName == "upload_time") {
-            hasUploadTime = true;
-            break;
-        }
-    }
-
-    if (!hasUploadTime) {
-        Logger::get().logInfo("Adding upload_time column to file table...");
-        if (!executeQuery("ALTER TABLE file ADD COLUMN upload_time DATETIME DEFAULT CURRENT_TIMESTAMP")) {
-            Logger::get().logError("Failed to add upload_time column");
-            return false;
-        }
-        Logger::get().logInfo("Added upload_time column to file table");
-    }
-
-    // Update existing records to have upload_time = updated_at if upload_time is NULL
-    if (!executeQuery("UPDATE file SET upload_time = updated_at WHERE upload_time IS NULL")) {
-        Logger::get().logWarning("Failed to update existing upload_time values");
-    }
-
-    // Check if course_file_id column exists
-    QSqlQuery checkCourseQuery("PRAGMA table_info(course)", db);
-    bool hasCourseFileId = false;
-
-    while (checkCourseQuery.next()) {
-        QString columnName = checkCourseQuery.value(1).toString();
-        if (columnName == "course_file_id") {
-            hasCourseFileId = true;
-            break;
-        }
-    }
-
-    if (!hasCourseFileId) {
-        Logger::get().logInfo("Adding course_file_id column to course table...");
-
-        // Add the new column
-        if (!executeQuery("ALTER TABLE course ADD COLUMN course_file_id INTEGER")) {
-            Logger::get().logError("Failed to add course_file_id column");
-            return false;
-        }
-
-        // Copy existing id values to course_file_id
-        if (!executeQuery("UPDATE course SET course_file_id = id WHERE course_file_id IS NULL")) {
-            Logger::get().logError("Failed to migrate course IDs");
-            return false;
-        }
-
-        Logger::get().logInfo("Added course_file_id column and migrated existing data");
-    }
-
-    Logger::get().logInfo("Schema upgrade v1->v2 completed successfully");
-    return true;
-}
-
-bool DatabaseSchema::upgradeFromV2ToV3() {
-    Logger::get().logInfo("Upgrading schema from v2 to v3 (adding enhanced schedule columns)");
-
-    // First create schedule tables if they don't exist
-    if (!createScheduleSetTable() || !createScheduleTable()) {
-        Logger::get().logError("Failed to create schedule tables during upgrade");
-        return false;
-    }
-
-    // Check if we need to add enhanced columns to existing schedule table
-    QSqlQuery checkColumn("PRAGMA table_info(schedule)", db);
-    bool hasEnhancedColumns = false;
-
-    while (checkColumn.next()) {
-        QString columnName = checkColumn.value(1).toString();
-        if (columnName == "earliest_start") {
-            hasEnhancedColumns = true;
-            break;
-        }
-    }
-
-    if (!hasEnhancedColumns) {
-        Logger::get().logInfo("Adding enhanced columns to existing schedule table");
-
-        // Add all the enhanced columns
-        vector<QString> enhancedColumns = {
-                "ALTER TABLE schedule ADD COLUMN earliest_start INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN latest_end INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN longest_gap INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN total_class_time INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN consecutive_days INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN days_json TEXT DEFAULT '[]'",
-                "ALTER TABLE schedule ADD COLUMN weekend_classes BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_morning_classes BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_early_morning BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_evening_classes BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_late_evening BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN max_daily_hours INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN min_daily_hours INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN avg_daily_hours INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_lunch_break BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN max_daily_gaps INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN avg_gap_length INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN schedule_span INTEGER DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN compactness_ratio REAL DEFAULT 0.0",
-                "ALTER TABLE schedule ADD COLUMN weekday_only BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_monday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_tuesday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_wednesday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_thursday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_friday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_saturday BOOLEAN DEFAULT 0",
-                "ALTER TABLE schedule ADD COLUMN has_sunday BOOLEAN DEFAULT 0"
-        };
-
-        for (const QString& alterQuery : enhancedColumns) {
-            if (!executeQuery(alterQuery)) {
-                Logger::get().logError("Failed to add column: " + alterQuery.toStdString());
-                // Continue with other columns rather than failing completely
-            }
-        }
-    }
-
-    // Create indexes for enhanced columns
-    if (!createScheduleIndexes()) {
-        Logger::get().logWarning("Some enhanced indexes failed to create");
-    }
-
-    Logger::get().logInfo("Schema upgrade v2->v3 completed successfully");
-    return true;
 }
 
 bool DatabaseSchema::validateSchema() {
@@ -442,37 +303,45 @@ bool DatabaseSchema::createScheduleTable() {
             schedule_name TEXT DEFAULT '',
             schedule_data_json TEXT NOT NULL,
 
+            -- Basic metrics (original)
             amount_days INTEGER DEFAULT 0,
             amount_gaps INTEGER DEFAULT 0,
             gaps_time INTEGER DEFAULT 0,
             avg_start INTEGER DEFAULT 0,
             avg_end INTEGER DEFAULT 0,
 
+            -- Enhanced time metrics
             earliest_start INTEGER DEFAULT 0,
             latest_end INTEGER DEFAULT 0,
             longest_gap INTEGER DEFAULT 0,
             total_class_time INTEGER DEFAULT 0,
 
+            -- Day pattern metrics
             consecutive_days INTEGER DEFAULT 0,
             days_json TEXT DEFAULT '[]',
             weekend_classes BOOLEAN DEFAULT 0,
 
+            -- Time preference flags
             has_morning_classes BOOLEAN DEFAULT 0,
             has_early_morning BOOLEAN DEFAULT 0,
             has_evening_classes BOOLEAN DEFAULT 0,
             has_late_evening BOOLEAN DEFAULT 0,
 
+            -- Daily intensity metrics
             max_daily_hours INTEGER DEFAULT 0,
             min_daily_hours INTEGER DEFAULT 0,
             avg_daily_hours INTEGER DEFAULT 0,
 
+            -- Gap and break patterns
             has_lunch_break BOOLEAN DEFAULT 0,
             max_daily_gaps INTEGER DEFAULT 0,
             avg_gap_length INTEGER DEFAULT 0,
 
+            -- Efficiency metrics
             schedule_span INTEGER DEFAULT 0,
             compactness_ratio REAL DEFAULT 0.0,
 
+            -- Day pattern flags
             weekday_only BOOLEAN DEFAULT 0,
             has_monday BOOLEAN DEFAULT 0,
             has_tuesday BOOLEAN DEFAULT 0,
@@ -482,19 +351,21 @@ bool DatabaseSchema::createScheduleTable() {
             has_saturday BOOLEAN DEFAULT 0,
             has_sunday BOOLEAN DEFAULT 0,
 
+            -- System columns
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
             FOREIGN KEY (schedule_set_id) REFERENCES schedule_set(id) ON DELETE CASCADE,
             UNIQUE(schedule_set_id, schedule_index)
         )
     )";
 
     if (!executeQuery(query)) {
-        Logger::get().logError("Failed to create schedule table");
+        Logger::get().logError("Failed to create enhanced schedule table");
         return false;
     }
 
-    Logger::get().logInfo("Enhanced schedule table created successfully");
+    Logger::get().logInfo("Enhanced schedule table (v1) created successfully");
     return true;
 }
 

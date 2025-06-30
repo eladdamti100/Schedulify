@@ -413,7 +413,6 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
         needsSchemaCreation = true;
     }
 
-    // Handle schema upgrade
     if (needsSchemaUpgrade) {
         if (!schemaManager->upgradeSchema(currentSchemaVersion, getCurrentSchemaVersion())) {
             Logger::get().logError("Schema upgrade failed - recreating database");
@@ -424,7 +423,6 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
         }
     }
 
-    // Create schema if needed
     if (needsSchemaCreation) {
         if (!schemaManager->createTables()) {
             Logger::get().logError("Failed to create database tables");
@@ -432,8 +430,12 @@ bool DatabaseManager::initializeDatabase(const QString& dbPath) {
             return false;
         }
 
-        insertMetadata("schema_version", std::to_string(getCurrentSchemaVersion()), "Database schema version");
+        // Insert initial metadata with v1
+        insertMetadata("schema_version", "1", "Enhanced database schema version");  // Changed to "1"
         insertMetadata("created_at", QDateTime::currentDateTime().toString(Qt::ISODate).toStdString(), "Database creation timestamp");
+        insertMetadata("schema_type", "enhanced", "Schema includes all enhanced schedule metrics");
+
+        Logger::get().logInfo("Fresh database schema v1 created with enhanced features");
     }
 
     // Create indexes

@@ -151,22 +151,18 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
 
     try {
         map<int, vector<ScheduleItem>> daySchedules;
-
         const vector<string> dayNames = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
         for (const auto& selection : selections) {
             if (selection.lectureGroup) {
                 processGroupSessions(selection, selection.lectureGroup, "Lecture", daySchedules);
             }
-
             if (selection.tutorialGroup) {
                 processGroupSessions(selection, selection.tutorialGroup, "Tutorial", daySchedules);
             }
-
             if (selection.labGroup) {
                 processGroupSessions(selection, selection.labGroup, "Lab", daySchedules);
             }
-
             if (selection.blockGroup) {
                 processGroupSessions(selection, selection.blockGroup, "Block", daySchedules);
             }
@@ -175,7 +171,6 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
         for (int day = 0; day < 7; day++) {
             ScheduleDay scheduleDay;
             scheduleDay.day = dayNames[day];
-
             int algorithmDay = day + 1;
 
             if (daySchedules.find(algorithmDay) != daySchedules.end()) {
@@ -185,7 +180,6 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
                 });
                 scheduleDay.day_items = dayItems;
             }
-
             schedule.week.push_back(scheduleDay);
         }
 
@@ -193,6 +187,7 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
 
     } catch (const exception& e) {
         Logger::get().logError("Exception in convertToInformativeSchedule: " + string(e.what()));
+
         schedule.week.clear();
         const vector<string> dayNames = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
         for (int day = 0; day < 7; day++) {
@@ -200,6 +195,8 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
             scheduleDay.day = dayNames[day];
             schedule.week.push_back(scheduleDay);
         }
+
+        calculateScheduleMetrics(schedule);
     }
 
     return schedule;
@@ -274,16 +271,16 @@ void ScheduleBuilder::calculateScheduleMetrics(InformativeSchedule& schedule) {
     int scheduleSpan = 0;
 
     // Boolean flags
-    bool hasEarlyMorning = false;     // Before 8:30 AM (510 min)
-    bool hasMorning = false;          // Before 10:00 AM (600 min)
-    bool hasEvening = false;          // After 6:00 PM (1080 min)
-    bool hasLateEvening = false;      // After 8:00 PM (1200 min)
-    bool hasLunchBreak = false;       // Gap between 12:00-14:00 (720-840 min)
+    bool hasEarlyMorning = false;
+    bool hasMorning = false;
+    bool hasEvening = false;
+    bool hasLateEvening = false;
+    bool hasLunchBreak = false;
     bool weekendClasses = false;
 
     // Day tracking
     std::vector<int> daysWithClasses;
-    std::vector<bool> dayHasClasses(8, false); // Index 0 unused, 1-7 for days
+    std::vector<bool> dayHasClasses(8, false);
 
     try {
         for (int dayIndex = 0; dayIndex < static_cast<int>(schedule.week.size()); dayIndex++) {
@@ -294,7 +291,7 @@ void ScheduleBuilder::calculateScheduleMetrics(InformativeSchedule& schedule) {
             }
 
             totalDaysWithItems++;
-            int algorithmDay = dayIndex + 1; // Convert to 1-7 format
+            int algorithmDay = dayIndex + 1;
             daysWithClasses.push_back(algorithmDay);
             dayHasClasses[algorithmDay] = true;
 
@@ -425,13 +422,13 @@ void ScheduleBuilder::calculateScheduleMetrics(InformativeSchedule& schedule) {
         schedule.weekday_only = !weekendClasses && totalDaysWithItems > 0;
 
         // Individual day flags
-        schedule.has_monday = dayHasClasses[2];    // Monday is day 2 in algorithm
+        schedule.has_sunday = dayHasClasses[1];
+        schedule.has_monday = dayHasClasses[2];
         schedule.has_tuesday = dayHasClasses[3];
         schedule.has_wednesday = dayHasClasses[4];
         schedule.has_thursday = dayHasClasses[5];
         schedule.has_friday = dayHasClasses[6];
         schedule.has_saturday = dayHasClasses[7];
-        schedule.has_sunday = dayHasClasses[1];    // Sunday is day 1 in algorithm
 
         // Days JSON array
         schedule.days_json = "[";
