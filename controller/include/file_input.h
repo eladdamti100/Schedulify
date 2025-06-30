@@ -55,7 +55,6 @@ private:
     void proceedWithCourses(const vector<Course>& courses);
 
     // Helper methods for debugging
-    void logFileSelectionState();
     void validateFileSelection();
 };
 

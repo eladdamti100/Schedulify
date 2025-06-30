@@ -12,17 +12,14 @@ class ScheduleDatabaseWriter {
 public:
     static ScheduleDatabaseWriter& getInstance();
 
-    // Initialize for a new schedule generation session
-    bool initializeSession(const std::string& setName, const std::vector<int>& sourceFileIds);
+    // Disable copy/move
+    ScheduleDatabaseWriter(const ScheduleDatabaseWriter&) = delete;
+    ScheduleDatabaseWriter& operator=(const ScheduleDatabaseWriter&) = delete;
 
-    // Write a single schedule during generation
+    bool initializeSession();
+
     bool writeSchedule(const InformativeSchedule& schedule);
-
-    // Finalize the session (update counts, etc.)
     bool finalizeSession();
-
-    // Get the current session's set ID
-    int getCurrentSetId() const { return currentSetId; }
 
     // Get statistics about the current session
     struct SessionStats {
@@ -42,19 +39,12 @@ private:
     ScheduleDatabaseWriter() = default;
     ~ScheduleDatabaseWriter();
 
-    // Disable copy/move
-    ScheduleDatabaseWriter(const ScheduleDatabaseWriter&) = delete;
-    ScheduleDatabaseWriter& operator=(const ScheduleDatabaseWriter&) = delete;
-
     // Internal state
     bool sessionActive = false;
-    int currentSetId = -1;
-    std::string currentSetName;
-    std::vector<int> currentSourceFileIds;
     SessionStats sessionStats;
 
     // Batch writing
-    int batchSize = 100; // Write in batches of 100
+    int batchSize = 100;
     std::vector<InformativeSchedule> currentBatch;
 
     // Internal methods

@@ -452,6 +452,16 @@ BotQueryResponse ClaudeAPIClient::parseClaudeResponse(const string& responseData
             botResponse.isFilterQuery = true;
             botResponse.sqlQuery = sqlQuery;
             botResponse.queryParameters = parameters;
+            Logger::get().logInfo("sqlQuery: " + sqlQuery);
+
+            if (parameters.empty()) {
+                Logger::get().logInfo("Query Parameters: None");
+            } else {
+                Logger::get().logInfo("Query Parameters (" + std::to_string(parameters.size()) + " total):");
+                for (size_t i = 0; i < parameters.size(); ++i) {
+                    Logger::get().logInfo("  [" + std::to_string(i) + "]: " + parameters[i]);
+                }
+            }
         } else {
             botResponse.isFilterQuery = false;
         }

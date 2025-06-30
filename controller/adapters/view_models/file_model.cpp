@@ -50,16 +50,12 @@ void FileHistoryModel::populateFiles(const vector<FileEntity>& files) {
     beginResetModel();
     m_files = files;
     endResetModel();
-
-    Logger::get().logInfo("FileHistoryModel populated with " + std::to_string(files.size()) + " files");
 }
 
 void FileHistoryModel::clearFiles() {
     beginResetModel();
     m_files.clear();
     endResetModel();
-
-    Logger::get().logInfo("FileHistoryModel cleared");
 }
 
 int FileHistoryModel::getFileId(int index) const {
@@ -69,19 +65,15 @@ int FileHistoryModel::getFileId(int index) const {
     }
 
     int fileId = m_files.at(index).id;
-    Logger::get().logInfo("getFileId(" + std::to_string(index) + ") = " + std::to_string(fileId));
     return fileId;
 }
 
 void FileHistoryModel::forceRefresh() {
-    Logger::get().logInfo("FileHistoryModel: forcing refresh of all items");
 
     if (!m_files.empty()) {
         // Emit dataChanged for all items to force UI refresh
         QModelIndex topLeft = createIndex(0, 0);
         QModelIndex bottomRight = createIndex(static_cast<int>(m_files.size()) - 1, 0);
         emit dataChanged(topLeft, bottomRight);
-
-        Logger::get().logInfo("FileHistoryModel: dataChanged emitted for " + std::to_string(m_files.size()) + " items");
     }
 }

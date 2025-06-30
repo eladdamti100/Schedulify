@@ -129,9 +129,6 @@ void ScheduleModel::applyScheduleFilter(const QVariantList& scheduleIds) {
     emit filteredScheduleIdsChanged();
     emit scheduleCountChanged();
     emit scheduleDataChanged();
-
-    qDebug() << "Applied filter with" << m_filteredIds.size() << "schedule IDs";
-    qDebug() << "Filtered schedules count:" << m_filteredSchedules.size();
 }
 
 void ScheduleModel::clearScheduleFilter() {
@@ -149,7 +146,6 @@ void ScheduleModel::clearScheduleFilter() {
         emit scheduleCountChanged();
         emit scheduleDataChanged();
 
-        qDebug() << "Cleared schedule filter, showing all" << m_allSchedules.size() << "schedules";
     }
 }
 
@@ -177,7 +173,6 @@ void ScheduleModel::updateFilteredSchedules() {
         }
     }
 
-    qDebug() << "Updated filtered schedules:" << m_filteredSchedules.size() << "out of" << m_allSchedules.size();
 }
 
 void ScheduleModel::resetCurrentIndex() {

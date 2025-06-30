@@ -40,7 +40,7 @@ public:
 
     // Properties
     ScheduleModel* scheduleModel() const { return m_scheduleModel; }
-    bool isFiltered() const { return m_scheduleModel ? m_scheduleModel->isFiltered() : false; }
+    bool isFiltered() const { return m_scheduleModel != nullptr && m_scheduleModel->isFiltered(); }
 
     // QML accessible methods
     Q_INVOKABLE void goBack() override;

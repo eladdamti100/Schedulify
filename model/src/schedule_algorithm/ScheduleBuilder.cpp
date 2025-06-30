@@ -78,15 +78,11 @@ vector<InformativeSchedule> ScheduleBuilder::build(const vector<Course>& courses
 
         // Initialize progressive writing if enabled
         if (progressiveWriting) {
-            string actualSetName = setName.empty() ?
-                                   "Generated Schedules " + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString()
-                                                   : setName;
-
-            if (!ScheduleDatabaseWriter::getInstance().initializeSession(actualSetName, sourceFileIds)) {
+            if (!ScheduleDatabaseWriter::getInstance().initializeSession()) {  // Simplified call
                 Logger::get().logError("Failed to initialize database writing session - continuing without DB writing");
                 progressiveWriting = false;
             } else {
-                Logger::get().logInfo("Progressive database writing enabled for set: " + actualSetName);
+                Logger::get().logInfo("Progressive database writing enabled");
             }
         }
 

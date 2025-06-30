@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     Logger::get().logInitiate();
-    Logger::get().logInfo("Application started - Qt initialized");
+    Logger::get().logInfo("Application started");
 
     try {
         auto& dbIntegration = ModelDatabaseIntegration::getInstance();
@@ -94,9 +94,7 @@ int main(int argc, char *argv[])
         Logger::get().logInfo("Cleanup signal processing completed");
     });
 
-    Logger::get().logInfo("Starting application event loop");
-    int result = app.exec();
-    Logger::get().logInfo("Application event loop finished with code: " + std::to_string(result));
+    int result = QApplication::exec();
 
     return result;
 }

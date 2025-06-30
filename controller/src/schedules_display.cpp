@@ -30,43 +30,12 @@ SchedulesDisplayController::~SchedulesDisplayController() {
 void SchedulesDisplayController::loadScheduleData(const std::vector<InformativeSchedule> &schedules) {
     m_schedules = schedules;
     m_scheduleModel->loadSchedules(m_schedules);
+    m_scheduleModel->setCurrentScheduleIndex(0);
 }
 
 void SchedulesDisplayController::goBack() {
-    try {
-        // Clear all schedules from database before going back
-        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
-        if (dbIntegration.isInitialized()) {
-            auto& db = DatabaseManager::getInstance();
-            if (db.isConnected()) {
-                // Clear all schedules but keep courses and files
-                if (db.schedules()->deleteAllSchedules()) {
-                    Logger::get().logInfo("All schedules cleared successfully");
-                } else {
-                    Logger::get().logWarning("Failed to clear some schedules");
-                }
-
-                auto scheduleSets = db.schedules()->getAllScheduleSets();
-                for (const auto& scheduleSet : scheduleSets) {
-                    if (!db.schedules()->deleteScheduleSet(scheduleSet.id)) {
-                        Logger::get().logWarning("Failed to delete schedule set ID: " + std::to_string(scheduleSet.id));
-                    }
-                }
-
-                // Update metadata about cleanup
-                db.updateMetadata("last_schedule_cleanup",
-                                  QDateTime::currentDateTime().toString(Qt::ISODate).toStdString());
-
-            } else {
-                Logger::get().logWarning("Database not connected - skipping schedule cleanup");
-            }
-        } else {
-            Logger::get().logWarning("Database not initialized - skipping schedule cleanup");
-        }
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception during schedule cleanup on back: " + std::string(e.what()));
-    }
-
+    modelConnection->executeOperation(ModelOperation::CLEAN_SCHEDULES, nullptr, "");
+    m_scheduleModel->setCurrentScheduleIndex(0);
     emit navigateBack();
 }
 
@@ -81,7 +50,6 @@ void SchedulesDisplayController::processBotMessage(const QString& userMessage) {
     bool hadPreviousFilter = false;
     if (m_scheduleModel && m_scheduleModel->isFiltered()) {
         hadPreviousFilter = true;
-        m_scheduleModel->clearScheduleFilter();
     }
 
     BotQueryRequest queryRequest = createBotQueryRequest(userMessage);
@@ -133,6 +101,8 @@ void SchedulesDisplayController::handleBotResponse(const BotQueryResponse& respo
         emit botResponseReceived(response.errorMessage.empty()
                                  ? QString("An error occurred while processing your request.")
                                  : QString::fromStdString(response.errorMessage));
+        m_scheduleModel->clearScheduleFilter();
+        m_scheduleModel->setCurrentScheduleIndex(0);
         return;
     }
 
@@ -141,7 +111,8 @@ void SchedulesDisplayController::handleBotResponse(const BotQueryResponse& respo
 
     // If this was a filter query, apply the filter
     if (response.isFilterQuery) {
-
+        m_scheduleModel->clearScheduleFilter();
+        m_scheduleModel->setCurrentScheduleIndex(0);
         // Get the filtered schedule IDs from model
         void* result = modelConnection->executeOperation(ModelOperation::GET_LAST_FILTERED_IDS, nullptr, "");
 
@@ -151,6 +122,7 @@ void SchedulesDisplayController::handleBotResponse(const BotQueryResponse& respo
 
             if (filteredIds->empty()) {
                 responseMessage += "\n\n❌ No schedules match your criteria.";
+
             } else {
                 // Convert to QVariantList and apply filter
                 QVariantList qmlIds;
@@ -178,7 +150,7 @@ void SchedulesDisplayController::handleBotResponse(const BotQueryResponse& respo
 void SchedulesDisplayController::resetFilters() {
     if (m_scheduleModel && m_scheduleModel->isFiltered()) {
         m_scheduleModel->clearScheduleFilter();
-        qDebug() << "Filters reset - showing all schedules";
+        m_scheduleModel->setCurrentScheduleIndex(0);
     }
 }
 
@@ -191,9 +163,6 @@ void SchedulesDisplayController::onScheduleFilterStateChanged() {
 
         if (m_scheduleModel->isFiltered()) {
             emit schedulesFiltered(filteredCount, totalCount);
-            qDebug() << "Schedule filter applied:" << filteredCount << "of" << totalCount << "schedules visible";
-        } else {
-            qDebug() << "Schedule filter cleared - all" << totalCount << "schedules visible";
         }
     }
 }

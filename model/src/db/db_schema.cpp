@@ -7,7 +7,6 @@ bool DatabaseSchema::createTables() {
     return createMetadataTable() &&
            createFileTable() &&
            createCourseTable() &&
-           createScheduleSetTable() &&
            createScheduleTable();
 }
 
@@ -15,7 +14,6 @@ bool DatabaseSchema::createIndexes() {
     return createMetadataIndexes() &&
            createFileIndexes() &&
            createCourseIndexes() &&
-           createScheduleSetIndexes() &&
            createScheduleIndexes();
 }
 
@@ -178,119 +176,57 @@ bool DatabaseSchema::executeQuery(const QString& query) {
     return true;
 }
 
-bool DatabaseSchema::createScheduleSetTable() {
-    const QString query = R"(
-        CREATE TABLE IF NOT EXISTS schedule_set (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            set_name TEXT NOT NULL,
-            source_file_ids_json TEXT DEFAULT '[]',
-            schedule_count INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    )";
-
-    if (!executeQuery(query)) {
-        Logger::get().logError("Failed to create schedule_set table");
-        return false;
-    }
-
-    Logger::get().logInfo("Schedule set table created successfully");
-    return true;
-}
-
 bool DatabaseSchema::createScheduleTable() {
     const QString query = R"(
         CREATE TABLE IF NOT EXISTS schedule (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            schedule_set_id INTEGER NOT NULL,
             schedule_index INTEGER NOT NULL,
-            schedule_name TEXT DEFAULT '',
             schedule_data_json TEXT NOT NULL,
-
-            -- Basic metrics (original)
-            amount_days INTEGER DEFAULT 0,
-            amount_gaps INTEGER DEFAULT 0,
-            gaps_time INTEGER DEFAULT 0,
-            avg_start INTEGER DEFAULT 0,
-            avg_end INTEGER DEFAULT 0,
-
-            -- Enhanced time metrics
-            earliest_start INTEGER DEFAULT 0,
-            latest_end INTEGER DEFAULT 0,
-            longest_gap INTEGER DEFAULT 0,
-            total_class_time INTEGER DEFAULT 0,
-
-            -- Day pattern metrics
-            consecutive_days INTEGER DEFAULT 0,
-            days_json TEXT DEFAULT '[]',
-            weekend_classes BOOLEAN DEFAULT 0,
-
-            -- Time preference flags
-            has_morning_classes BOOLEAN DEFAULT 0,
-            has_early_morning BOOLEAN DEFAULT 0,
-            has_evening_classes BOOLEAN DEFAULT 0,
-            has_late_evening BOOLEAN DEFAULT 0,
-
-            -- Daily intensity metrics
-            max_daily_hours INTEGER DEFAULT 0,
-            min_daily_hours INTEGER DEFAULT 0,
-            avg_daily_hours INTEGER DEFAULT 0,
-
-            -- Gap and break patterns
-            has_lunch_break BOOLEAN DEFAULT 0,
-            max_daily_gaps INTEGER DEFAULT 0,
-            avg_gap_length INTEGER DEFAULT 0,
-
-            -- Efficiency metrics
-            schedule_span INTEGER DEFAULT 0,
-            compactness_ratio REAL DEFAULT 0.0,
-
-            -- Day pattern flags
-            weekday_only BOOLEAN DEFAULT 0,
-            has_monday BOOLEAN DEFAULT 0,
-            has_tuesday BOOLEAN DEFAULT 0,
-            has_wednesday BOOLEAN DEFAULT 0,
-            has_thursday BOOLEAN DEFAULT 0,
-            has_friday BOOLEAN DEFAULT 0,
-            has_saturday BOOLEAN DEFAULT 0,
-            has_sunday BOOLEAN DEFAULT 0,
-
-            -- System columns
+            amount_days INTEGER NOT NULL,
+            amount_gaps INTEGER NOT NULL,
+            gaps_time INTEGER NOT NULL,
+            avg_start INTEGER NOT NULL,
+            avg_end INTEGER NOT NULL,
+            earliest_start INTEGER NOT NULL,
+            latest_end INTEGER NOT NULL,
+            longest_gap INTEGER NOT NULL,
+            total_class_time INTEGER NOT NULL,
+            consecutive_days INTEGER NOT NULL,
+            days_json TEXT NOT NULL,
+            weekend_classes BOOLEAN NOT NULL,
+            has_morning_classes BOOLEAN NOT NULL,
+            has_early_morning BOOLEAN NOT NULL,
+            has_evening_classes BOOLEAN NOT NULL,
+            has_late_evening BOOLEAN NOT NULL,
+            max_daily_hours INTEGER NOT NULL,
+            min_daily_hours INTEGER NOT NULL,
+            avg_daily_hours INTEGER NOT NULL,
+            has_lunch_break BOOLEAN NOT NULL,
+            max_daily_gaps INTEGER NOT NULL,
+            avg_gap_length INTEGER NOT NULL,
+            schedule_span INTEGER NOT NULL,
+            compactness_ratio REAL NOT NULL,
+            weekday_only BOOLEAN NOT NULL,
+            has_monday BOOLEAN NOT NULL,
+            has_tuesday BOOLEAN NOT NULL,
+            has_wednesday BOOLEAN NOT NULL,
+            has_thursday BOOLEAN NOT NULL,
+            has_friday BOOLEAN NOT NULL,
+            has_saturday BOOLEAN NOT NULL,
+            has_sunday BOOLEAN NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY (schedule_set_id) REFERENCES schedule_set(id) ON DELETE CASCADE,
-            UNIQUE(schedule_set_id, schedule_index)
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            -- REMOVED: schedule_set_id and foreign key constraint
         )
     )";
 
     if (!executeQuery(query)) {
-        Logger::get().logError("Failed to create enhanced schedule table");
+        Logger::get().logError("Failed to create schedule table");
         return false;
     }
 
     Logger::get().logInfo("Enhanced schedule table (v1) created successfully");
     return true;
-}
-
-bool DatabaseSchema::createScheduleSetIndexes() {
-    bool success = true;
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_set_name ON schedule_set(set_name)")) {
-        Logger::get().logWarning("Failed to create schedule_set name index");
-        success = false;
-    }
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_set_created_at ON schedule_set(created_at)")) {
-        Logger::get().logWarning("Failed to create schedule_set created_at index");
-        success = false;
-    }
-
-    if (success) {
-        Logger::get().logInfo("Schedule set indexes created successfully");
-    }
-    return success;
 }
 
 bool DatabaseSchema::createScheduleIndexes() {

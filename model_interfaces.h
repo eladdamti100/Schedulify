@@ -138,17 +138,12 @@ enum class ModelOperation {
     GENERATE_SCHEDULES,
     SAVE_SCHEDULE,
     PRINT_SCHEDULE,
-    LOAD_COURSES_FROM_DB,
-    CLEAR_DATABASE,
     BOT_QUERY_SCHEDULES,
     GET_LAST_FILTERED_IDS,
     LOAD_FROM_HISTORY,
     GET_FILE_HISTORY,
     DELETE_FILE_FROM_HISTORY,
-    SAVE_SCHEDULES_TO_DB,
-    LOAD_SCHEDULES_FROM_DB,
-    GET_SCHEDULE_SETS,
-    DELETE_SCHEDULE_SET
+    CLEAN_SCHEDULES
 };
 
 struct ScheduleFilterData {
@@ -166,17 +161,6 @@ struct ScheduleFilterData {
     ScheduleFilterData(int maxD, int maxG, int maxGT, int minAS, int maxAS, int minAE, int maxAE)
             : maxDays(maxD), maxGaps(maxG), maxGapTime(maxGT),
               minAvgStart(minAS), maxAvgStart(maxAS), minAvgEnd(minAE), maxAvgEnd(maxAE) {}
-};
-
-struct ScheduleSaveData {
-    vector<InformativeSchedule> schedules;
-    string setName;
-    vector<int> sourceFileIds;
-
-    ScheduleSaveData() = default;
-
-    ScheduleSaveData(const vector<InformativeSchedule>& scheds, string  name, const vector<int>& fileIds)
-            : schedules(scheds), setName(std::move(name)), sourceFileIds(fileIds) {}
 };
 
 class IModel {

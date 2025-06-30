@@ -38,12 +38,8 @@ public:
     // Utility operations
     bool clearAllDatabaseData();
 
-    bool saveSchedulesToDatabase(const vector<InformativeSchedule>& schedules, const string& setName = "",
-                                 const vector<int>& sourceFileIds = {});
-    vector<InformativeSchedule> getSchedulesFromDatabase(int setId = -1);
-    vector<ScheduleSetEntity> getScheduleSets();
-    bool deleteScheduleSet(int setId);
-
+    bool saveSchedulesToDatabase(const vector<InformativeSchedule>& schedules);
+    vector<InformativeSchedule> getSchedulesFromDatabase();
 
 private:
     ModelDatabaseIntegration() = default;

@@ -69,7 +69,6 @@ bool DatabaseCourseManager::insertCourses(const vector<Course>& courses, int fil
             successCount++;
         } else {
             Logger::get().logError("Failed to insert course: " + course.name + " (File ID: " + std::to_string(course.id) + ")");
-            // Continue with other courses rather than aborting entire transaction
         }
     }
 
@@ -194,12 +193,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileId(int fileId) {
 
     Logger::get().logInfo("Found " + std::to_string(courseCount) + " courses for file ID: " + std::to_string(fileId));
 
-    // Debug: Log first few courses
-    for (size_t i = 0; i < std::min(courses.size(), size_t(3)); ++i) {
-        Logger::get().logInfo("  Course " + std::to_string(i) + ": File ID=" + std::to_string(courses[i].id) +
-                              ", Raw ID=" + courses[i].raw_id + ", Name=" + courses[i].name);
-    }
-
     return courses;
 }
 
@@ -236,10 +229,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
             Course course = createCourseFromQuery(query);
             string fileName = query.value(10).toString().toStdString();
             QDateTime uploadTime = query.value(11).toDateTime();
-
-            Logger::get().logInfo("  Found course: File ID=" + std::to_string(course.id) +
-                                  ", Raw ID=" + course.raw_id + ", Name=" + course.name +
-                                  ", From file: " + fileName);
 
             CourseConflictInfo conflictInfo;
             conflictInfo.course = course;

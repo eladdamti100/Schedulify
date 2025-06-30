@@ -95,43 +95,6 @@ struct CourseConflictInfo {
     file_name(std::move(fileName)), upload_time(std::move(uploadTime)) {}
 };
 
-struct ScheduleSetEntity {
-    int id = 0;
-    string set_name;
-    string source_file_ids_json;
-    int schedule_count = 0;
-    QDateTime created_at;
-    QDateTime updated_at;
-
-    // Default constructor
-    ScheduleSetEntity() = default;
-
-    // Constructor for database insertion
-    ScheduleSetEntity(string  name, const vector<int>& fileIds) : set_name(std::move(name)),
-    created_at(QDateTime::currentDateTime()), updated_at(QDateTime::currentDateTime()) {
-        QJsonArray jsonArray;
-        for (int idN : fileIds) {
-            jsonArray.append(idN);
-        }
-        QJsonDocument doc(jsonArray);
-        source_file_ids_json = doc.toJson(QJsonDocument::Compact).toStdString();
-    }
-
-    vector<int> getSourceFileIds() const {
-        vector<int> fileIds;
-        QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(source_file_ids_json));
-        if (doc.isArray()) {
-            QJsonArray array = doc.array();
-            for (const auto& value : array) {
-                if (value.isDouble()) {
-                    fileIds.push_back(value.toInt());
-                }
-            }
-        }
-        return fileIds;
-    }
-};
-
 struct ScheduleEntity {
     int id = 0;
     int schedule_set_id = 0;

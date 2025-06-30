@@ -17,6 +17,7 @@
 #include "sql_validator.h"
 #include "claude_api_integration.h"
 #include "schedule_filter_service.h"
+#include "cleanup_manager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -60,7 +61,6 @@ private:
 
     // Core business logic methods - these belong in main model
     static vector<Course> generateCourses(const string& path);
-    static vector<Course> loadCoursesFromDB();
     static vector<Course> loadCoursesFromHistory(const vector<int>& fileIds);
     static vector<FileEntity> getFileHistory();
     static vector<string> validateCourses(const vector<Course>& courses);
@@ -68,15 +68,11 @@ private:
     static void saveSchedule(const InformativeSchedule& infoSchedule, const string& path);
     static void printSchedule(const InformativeSchedule& infoSchedule);
     static bool deleteFileFromHistory(int fileId);
-    static bool saveSchedulesToDB(const vector<InformativeSchedule>& schedules, const string& setName, const vector<int>& sourceFileIds);
-    static vector<InformativeSchedule> loadSchedulesFromDB(int setId = -1);
-    static vector<ScheduleSetEntity> getScheduleSetsFromDB();
-    static bool deleteScheduleSetFromDB(int setId);
+    static bool saveSchedulesToDB(const vector<InformativeSchedule>& schedules);
     static BotQueryResponse processClaudeQuery(const BotQueryRequest& request);
 
     static std::vector<int> lastFilteredScheduleIds;
     static vector<Course> lastGeneratedCourses;
-    static vector<string> courseFileErrors;
     static vector<InformativeSchedule> lastGeneratedSchedules;
 };
 

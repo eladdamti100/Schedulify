@@ -1,6 +1,5 @@
 #include "db_files.h"
 
-
 DatabaseFileManager::DatabaseFileManager(QSqlDatabase& database) : db(database) {
 }
 
@@ -83,7 +82,6 @@ int DatabaseFileManager::insertFile(const string& fileName, const string& fileTy
 
         if (idQuery.exec() && idQuery.next()) {
             int altId = idQuery.value(0).toInt();
-            Logger::get().logInfo("Retrieved file ID using alternative method: " + std::to_string(altId));
             return altId;
         }
 
@@ -97,7 +95,6 @@ int DatabaseFileManager::insertFile(const string& fileName, const string& fileTy
         return -1;
     }
 
-    Logger::get().logInfo("File: '" + fileName + "' inserted with ID: " + std::to_string(fileId));
     return fileId;
 }
 
@@ -297,7 +294,6 @@ int DatabaseFileManager::getFileIdByName(const string& fileName) {
 
     if (query.next()) {
         int fileId = query.value(0).toInt();
-        Logger::get().logInfo("Found file ID " + std::to_string(fileId) + " for name: " + fileName);
         return fileId;
     }
 

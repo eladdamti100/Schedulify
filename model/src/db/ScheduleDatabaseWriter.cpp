@@ -11,7 +11,7 @@ ScheduleDatabaseWriter::~ScheduleDatabaseWriter() {
     }
 }
 
-bool ScheduleDatabaseWriter::initializeSession(const std::string& setName, const std::vector<int>& sourceFileIds) {
+bool ScheduleDatabaseWriter::initializeSession() {
     if (sessionActive) {
         Logger::get().logWarning("Session already active, finalizing previous session");
         finalizeSession();
@@ -26,27 +26,12 @@ bool ScheduleDatabaseWriter::initializeSession(const std::string& setName, const
             }
         }
 
-        // Create schedule set
-        auto& db = DatabaseManager::getInstance();
-        if (!db.isConnected()) {
-            Logger::get().logError("Database not connected for schedule writing");
-            return false;
-        }
-
-        currentSetId = db.schedules()->createScheduleSet(setName, sourceFileIds);
-        if (currentSetId <= 0) {
-            Logger::get().logError("Failed to create schedule set for writing");
-            return false;
-        }
-
-        currentSetName = setName;
-        currentSourceFileIds = sourceFileIds;
         sessionActive = true;
         sessionStats = SessionStats();
         sessionStats.sessionActive = true;
         currentBatch.clear();
 
-        Logger::get().logInfo("Schedule writing session initialized - Set ID: " + std::to_string(currentSetId));
+        Logger::get().logInfo("Schedule writing session initialized");
         return true;
 
     } catch (const std::exception& e) {
@@ -122,18 +107,9 @@ bool ScheduleDatabaseWriter::finalizeSession() {
 
         // Update schedule count in set
         auto& db = DatabaseManager::getInstance();
-        if (db.isConnected() && currentSetId > 0) {
-            // The updateScheduleSetCount is called automatically in the database manager
-            // but let's ensure it's correct
-            int actualCount = db.schedules()->getScheduleCountBySetId(currentSetId);
-            Logger::get().logInfo("Finalized session - Set ID: " + std::to_string(currentSetId) +
-                                  ", Expected: " + std::to_string(sessionStats.successfulWrites) +
-                                  ", Actual: " + std::to_string(actualCount));
-        }
 
         // Log session results
         Logger::get().logInfo("=== SCHEDULE WRITING SESSION COMPLETED ===");
-        Logger::get().logInfo("Set Name: " + currentSetName);
         Logger::get().logInfo("Total Processed: " + std::to_string(sessionStats.totalSchedulesWritten));
         Logger::get().logInfo("Successfully Written: " + std::to_string(sessionStats.successfulWrites));
         Logger::get().logInfo("Failed Writes: " + std::to_string(sessionStats.failedWrites));
@@ -160,24 +136,8 @@ bool ScheduleDatabaseWriter::writeBatchToDatabase() {
             return false;
         }
 
-        // Use the new bulk insert method for better performance
-        bool success = db.schedules()->insertSchedulesBulk(currentBatch, currentSetId);
-
-        if (!success) {
-            Logger::get().logError("Bulk insert failed, falling back to individual inserts");
-
-            // Fallback to individual inserts
-            DatabaseTransaction transaction(db);
-
-            for (const auto& schedule : currentBatch) {
-                if (!db.schedules()->insertSchedule(schedule, "", currentSourceFileIds)) {
-                    Logger::get().logError("Failed to insert schedule index " + std::to_string(schedule.index));
-                    return false;
-                }
-            }
-
-            success = transaction.commit();
-        }
+        // Use simplified bulk insert
+        bool success = db.schedules()->insertSchedules(currentBatch);
 
         return success;
 
@@ -189,9 +149,6 @@ bool ScheduleDatabaseWriter::writeBatchToDatabase() {
 
 void ScheduleDatabaseWriter::resetSession() {
     sessionActive = false;
-    currentSetId = -1;
-    currentSetName.clear();
-    currentSourceFileIds.clear();
     sessionStats = SessionStats();
     currentBatch.clear();
 }

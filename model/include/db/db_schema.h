@@ -30,22 +30,18 @@ private:
     bool createMetadataTable();
     bool createFileTable();
     bool createCourseTable();
+    bool createScheduleTable();
 
     // Index creation methods
     bool createFileIndexes();
     bool createCourseIndexes();
     bool createMetadataIndexes();
+    bool createScheduleIndexes();
+
 
     // Utility methods
     bool executeQuery(const QString& query);
 
-    // Schema creation methods
-    bool createScheduleSetTable();
-    bool createScheduleTable();
-
-    // Index creation methods
-    bool createScheduleSetIndexes();
-    bool createScheduleIndexes();
 };
 
 #endif // DB_SCHEMA_H

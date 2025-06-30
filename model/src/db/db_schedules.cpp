@@ -4,28 +4,16 @@
 DatabaseScheduleManager::DatabaseScheduleManager(QSqlDatabase& database) : db(database) {
 }
 
-bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule, const string& scheduleName,
-                                             const vector<int>& sourceFileIds) {
+bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule) {
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for schedule insertion");
         return false;
     }
 
-    // Create a schedule set if we don't have one
-    string setName = scheduleName.empty() ? "Generated Schedules " +
-                                            QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString()
-                                          : scheduleName;
-
-    int setId = createScheduleSet(setName, sourceFileIds);
-    if (setId <= 0) {
-        Logger::get().logError("Failed to create schedule set");
-        return false;
-    }
-
     QSqlQuery query(db);
     query.prepare(R"(
-        INSERT INTO schedule 
-        (schedule_set_id, schedule_index, schedule_name, schedule_data_json, 
+        INSERT INTO schedule
+        (schedule_index, schedule_data_json,
          amount_days, amount_gaps, gaps_time, avg_start, avg_end,
          earliest_start, latest_end, longest_gap, total_class_time,
          consecutive_days, days_json, weekend_classes,
@@ -35,80 +23,73 @@ bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule
          schedule_span, compactness_ratio, weekday_only,
          has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
          created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     )");
 
     string scheduleJson = DatabaseJsonHelpers::scheduleToJson(schedule);
 
     // Bind all values in correct order
-    query.addBindValue(setId);                                              // 1
-    query.addBindValue(schedule.index);                                     // 2
-    query.addBindValue(QString::fromStdString(scheduleName));               // 3
-    query.addBindValue(QString::fromStdString(scheduleJson));               // 4
+    query.addBindValue(schedule.index);                                     // 1
+    query.addBindValue(QString::fromStdString(scheduleJson));               // 2
 
-    // Basic metrics (5-9)
-    query.addBindValue(schedule.amount_days);                               // 5
-    query.addBindValue(schedule.amount_gaps);                               // 6
-    query.addBindValue(schedule.gaps_time);                                 // 7
-    query.addBindValue(schedule.avg_start);                                 // 8
-    query.addBindValue(schedule.avg_end);                                   // 9
+    // Basic metrics (3-7)
+    query.addBindValue(schedule.amount_days);                               // 3
+    query.addBindValue(schedule.amount_gaps);                               // 4
+    query.addBindValue(schedule.gaps_time);                                 // 5
+    query.addBindValue(schedule.avg_start);                                 // 6
+    query.addBindValue(schedule.avg_end);                                   // 7
 
-    // Enhanced time metrics (10-13)
-    query.addBindValue(schedule.earliest_start);                            // 10
-    query.addBindValue(schedule.latest_end);                                // 11
-    query.addBindValue(schedule.longest_gap);                               // 12
-    query.addBindValue(schedule.total_class_time);                          // 13
+    // Enhanced time metrics (8-11)
+    query.addBindValue(schedule.earliest_start);                            // 8
+    query.addBindValue(schedule.latest_end);                                // 9
+    query.addBindValue(schedule.longest_gap);                               // 10
+    query.addBindValue(schedule.total_class_time);                          // 11
 
-    // Day patterns (14-16)
-    query.addBindValue(schedule.consecutive_days);                          // 14
-    query.addBindValue(QString::fromStdString(schedule.days_json));         // 15
-    query.addBindValue(schedule.weekend_classes);                           // 16
+    // Day patterns (12-14)
+    query.addBindValue(schedule.consecutive_days);                          // 12
+    query.addBindValue(QString::fromStdString(schedule.days_json));         // 13
+    query.addBindValue(schedule.weekend_classes);                           // 14
 
-    // Time preference booleans (17-20)
-    query.addBindValue(schedule.has_morning_classes);                       // 17
-    query.addBindValue(schedule.has_early_morning);                         // 18
-    query.addBindValue(schedule.has_evening_classes);                       // 19
-    query.addBindValue(schedule.has_late_evening);                          // 20
+    // Time preference booleans (15-18)
+    query.addBindValue(schedule.has_morning_classes);                       // 15
+    query.addBindValue(schedule.has_early_morning);                         // 16
+    query.addBindValue(schedule.has_evening_classes);                       // 17
+    query.addBindValue(schedule.has_late_evening);                          // 18
 
-    // Daily intensity (21-23)
-    query.addBindValue(schedule.max_daily_hours);                           // 21
-    query.addBindValue(schedule.min_daily_hours);                           // 22
-    query.addBindValue(schedule.avg_daily_hours);                           // 23
+    // Daily intensity (19-21)
+    query.addBindValue(schedule.max_daily_hours);                           // 19
+    query.addBindValue(schedule.min_daily_hours);                           // 20
+    query.addBindValue(schedule.avg_daily_hours);                           // 21
 
-    // Gap patterns (24-26)
-    query.addBindValue(schedule.has_lunch_break);                           // 24
-    query.addBindValue(schedule.max_daily_gaps);                            // 25
-    query.addBindValue(schedule.avg_gap_length);                            // 26
+    // Gap patterns (22-24)
+    query.addBindValue(schedule.has_lunch_break);                           // 22
+    query.addBindValue(schedule.max_daily_gaps);                            // 23
+    query.addBindValue(schedule.avg_gap_length);                            // 24
 
-    // Compactness (27-29)
-    query.addBindValue(schedule.schedule_span);                             // 27
-    query.addBindValue(schedule.compactness_ratio);                         // 28
-    query.addBindValue(schedule.weekday_only);                              // 29
+    // Compactness (25-27)
+    query.addBindValue(schedule.schedule_span);                             // 25
+    query.addBindValue(schedule.compactness_ratio);                         // 26
+    query.addBindValue(schedule.weekday_only);                              // 27
 
-    // Individual weekdays (30-36)
-    query.addBindValue(schedule.has_monday);                                // 30
-    query.addBindValue(schedule.has_tuesday);                               // 31
-    query.addBindValue(schedule.has_wednesday);                             // 32
-    query.addBindValue(schedule.has_thursday);                              // 33
-    query.addBindValue(schedule.has_friday);                                // 34
-    query.addBindValue(schedule.has_saturday);                              // 35
-    query.addBindValue(schedule.has_sunday);                                // 36
+    // Individual weekdays (28-34)
+    query.addBindValue(schedule.has_monday);                                // 28
+    query.addBindValue(schedule.has_tuesday);                               // 29
+    query.addBindValue(schedule.has_wednesday);                             // 30
+    query.addBindValue(schedule.has_thursday);                              // 31
+    query.addBindValue(schedule.has_friday);                                // 32
+    query.addBindValue(schedule.has_saturday);                              // 33
+    query.addBindValue(schedule.has_sunday);                                // 34
 
     if (!query.exec()) {
-        Logger::get().logError("Failed to insert enhanced schedule: " + query.lastError().text().toStdString());
+        Logger::get().logError("Failed to insert schedule: " + query.lastError().text().toStdString());
         return false;
     }
 
-    // Update schedule count in set
-    updateScheduleSetCount(setId);
-
-    Logger::get().logInfo("Enhanced schedule inserted successfully with set ID: " + to_string(setId));
     return true;
 }
 
-bool DatabaseScheduleManager::insertSchedules(const vector<InformativeSchedule>& schedules, const string& setName,
-                                              const vector<int>& sourceFileIds) {
+bool DatabaseScheduleManager::insertSchedules(const vector<InformativeSchedule>& schedules) {
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for schedule insertion");
         return false;
@@ -119,124 +100,8 @@ bool DatabaseScheduleManager::insertSchedules(const vector<InformativeSchedule>&
         return true;
     }
 
-    // Create schedule set
-    string actualSetName = setName.empty() ?
-                           "Generated Schedules " + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString()
-                                           : setName;
-
-    int setId = createScheduleSet(actualSetName, sourceFileIds);
-    if (setId <= 0) {
-        Logger::get().logError("Failed to create schedule set");
-        return false;
-    }
-
-    // Start transaction
-    if (!db.transaction()) {
-        Logger::get().logError("Failed to begin transaction for schedule insertion");
-        return false;
-    }
-
-    int successCount = 0;
-    for (const auto& schedule : schedules) {
-        QSqlQuery query(db);
-        query.prepare(R"(
-            INSERT INTO schedule 
-            (schedule_set_id, schedule_index, schedule_data_json, 
-             amount_days, amount_gaps, gaps_time, avg_start, avg_end,
-             earliest_start, latest_end, longest_gap, total_class_time,
-             consecutive_days, days_json, weekend_classes,
-             has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
-             max_daily_hours, min_daily_hours, avg_daily_hours,
-             has_lunch_break, max_daily_gaps, avg_gap_length,
-             schedule_span, compactness_ratio, weekday_only,
-             has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
-             created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        )");
-
-        string scheduleJson = DatabaseJsonHelpers::scheduleToJson(schedule);
-
-        // Bind all values in correct order
-        query.addBindValue(setId);                                              // 1
-        query.addBindValue(schedule.index);                                     // 2
-        query.addBindValue(QString::fromStdString(scheduleJson));               // 3
-
-        // Basic metrics (4-8)
-        query.addBindValue(schedule.amount_days);                               // 4
-        query.addBindValue(schedule.amount_gaps);                               // 5
-        query.addBindValue(schedule.gaps_time);                                 // 6
-        query.addBindValue(schedule.avg_start);                                 // 7
-        query.addBindValue(schedule.avg_end);                                   // 8
-
-        // Enhanced time metrics (9-12)
-        query.addBindValue(schedule.earliest_start);                            // 9
-        query.addBindValue(schedule.latest_end);                                // 10
-        query.addBindValue(schedule.longest_gap);                               // 11
-        query.addBindValue(schedule.total_class_time);                          // 12
-
-        // Day patterns (13-15)
-        query.addBindValue(schedule.consecutive_days);                          // 13
-        query.addBindValue(QString::fromStdString(schedule.days_json));         // 14
-        query.addBindValue(schedule.weekend_classes);                           // 15
-
-        // Time preference booleans (16-19)
-        query.addBindValue(schedule.has_morning_classes);                       // 16
-        query.addBindValue(schedule.has_early_morning);                         // 17
-        query.addBindValue(schedule.has_evening_classes);                       // 18
-        query.addBindValue(schedule.has_late_evening);                          // 19
-
-        // Daily intensity (20-22)
-        query.addBindValue(schedule.max_daily_hours);                           // 20
-        query.addBindValue(schedule.min_daily_hours);                           // 21
-        query.addBindValue(schedule.avg_daily_hours);                           // 22
-
-        // Gap patterns (23-25)
-        query.addBindValue(schedule.has_lunch_break);                           // 23
-        query.addBindValue(schedule.max_daily_gaps);                            // 24
-        query.addBindValue(schedule.avg_gap_length);                            // 25
-
-        // Compactness (26-28)
-        query.addBindValue(schedule.schedule_span);                             // 26
-        query.addBindValue(schedule.compactness_ratio);                         // 27
-        query.addBindValue(schedule.weekday_only);                              // 28
-
-        // Individual weekdays (29-35)
-        query.addBindValue(schedule.has_monday);                                // 29
-        query.addBindValue(schedule.has_tuesday);                               // 30
-        query.addBindValue(schedule.has_wednesday);                             // 31
-        query.addBindValue(schedule.has_thursday);                              // 32
-        query.addBindValue(schedule.has_friday);                                // 33
-        query.addBindValue(schedule.has_saturday);                              // 34
-        query.addBindValue(schedule.has_sunday);                                // 35
-
-        if (query.exec()) {
-            successCount++;
-        } else {
-            Logger::get().logError("Failed to insert schedule index " + to_string(schedule.index) +
-                                   ": " + query.lastError().text().toStdString());
-        }
-    }
-
-    if (successCount == 0) {
-        Logger::get().logError("Failed to insert any schedules, rolling back transaction");
-        db.rollback();
-        return false;
-    }
-
-    if (!db.commit()) {
-        Logger::get().logError("Failed to commit schedule insertion transaction");
-        db.rollback();
-        return false;
-    }
-
-    // Update schedule count in set
-    updateScheduleSetCount(setId);
-
-    Logger::get().logInfo("Successfully inserted " + to_string(successCount) + "/" +
-                          to_string(schedules.size()) + " schedules with set ID: " + to_string(setId));
-
-    return successCount == static_cast<int>(schedules.size());
+    // Use bulk insert for better performance
+    return insertSchedulesBulk(schedules);
 }
 
 bool DatabaseScheduleManager::deleteAllSchedules() {
@@ -256,71 +121,7 @@ bool DatabaseScheduleManager::deleteAllSchedules() {
     return true;
 }
 
-bool DatabaseScheduleManager::deleteSchedulesBySetId(int setId) {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule deletion");
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM schedule WHERE schedule_set_id = ?");
-    query.addBindValue(setId);
-
-    if (!query.exec()) {
-        Logger::get().logError("Failed to delete schedules for set ID " + to_string(setId) +
-                               ": " + query.lastError().text().toStdString());
-        return false;
-    }
-
-    int deletedCount = query.numRowsAffected();
-
-    // Update schedule count in set
-    updateScheduleSetCount(setId);
-
-    Logger::get().logInfo("Deleted " + to_string(deletedCount) + " schedules for set ID: " + to_string(setId));
-    return true;
-}
-
-int DatabaseScheduleManager::createScheduleSet(const string& setName, const vector<int>& sourceFileIds) {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule set creation");
-        return -1;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        INSERT INTO schedule_set (set_name, source_file_ids_json, created_at, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    )");
-
-    // Convert file IDs to JSON
-    QJsonArray jsonArray;
-    for (int id : sourceFileIds) {
-        jsonArray.append(id);
-    }
-    QJsonDocument doc(jsonArray);
-    string fileIdsJson = doc.toJson(QJsonDocument::Compact).toStdString();
-
-    query.addBindValue(QString::fromStdString(setName));
-    query.addBindValue(QString::fromStdString(fileIdsJson));
-
-    if (!query.exec()) {
-        Logger::get().logError("Failed to create schedule set: " + query.lastError().text().toStdString());
-        return -1;
-    }
-
-    QVariant lastId = query.lastInsertId();
-    if (!lastId.isValid()) {
-        Logger::get().logError("Failed to get schedule set ID after creation");
-        return -1;
-    }
-
-    int setId = lastId.toInt();
-    Logger::get().logInfo("Schedule set created: '" + setName + "' with ID: " + to_string(setId));
-    return setId;
-}
-
-vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesBySetId(int setId) {
+vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
     vector<InformativeSchedule> schedules;
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for schedule retrieval");
@@ -339,13 +140,11 @@ vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesBySetId(int set
                schedule_span, compactness_ratio, weekday_only,
                has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
         FROM schedule
-        WHERE schedule_set_id = ?
         ORDER BY schedule_index
     )");
-    query.addBindValue(setId);
 
     if (!query.exec()) {
-        Logger::get().logError("Failed to retrieve enhanced schedules: " + query.lastError().text().toStdString());
+        Logger::get().logError("Failed to retrieve schedules: " + query.lastError().text().toStdString());
         return schedules;
     }
 
@@ -353,63 +152,303 @@ vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesBySetId(int set
         schedules.push_back(createScheduleFromQuery(query));
     }
 
-    Logger::get().logInfo("Retrieved " + to_string(schedules.size()) +
-                          " enhanced schedules for set ID: " + to_string(setId));
+    Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules from database");
     return schedules;
 }
 
-vector<ScheduleSetEntity> DatabaseScheduleManager::getAllScheduleSets() {
-    vector<ScheduleSetEntity> sets;
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule set retrieval");
-        return sets;
+bool DatabaseScheduleManager::insertSchedulesBulk(const vector<InformativeSchedule>& schedules) {
+    if (!db.isOpen() || schedules.empty()) {
+        return false;
     }
 
-    QSqlQuery query(R"(
-        SELECT id, set_name, source_file_ids_json, schedule_count, created_at, updated_at
-        FROM schedule_set 
-        ORDER BY created_at DESC
-    )", db);
+    Logger::get().logInfo("Starting bulk insert of " + to_string(schedules.size()) + " schedules");
 
-    while (query.next()) {
-        sets.push_back(createScheduleSetFromQuery(query));
+    // Optimize database for bulk operations
+    DatabaseUtils::optimizeForBulkInserts(db);
+
+    try {
+        // Prepare batch data
+        vector<QVariantList> batchData;
+        batchData.reserve(schedules.size());
+
+        const QString insertQuery = R"(
+            INSERT INTO schedule
+            (schedule_index, schedule_data_json,
+             amount_days, amount_gaps, gaps_time, avg_start, avg_end,
+             earliest_start, latest_end, longest_gap, total_class_time,
+             consecutive_days, days_json, weekend_classes,
+             has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
+             max_daily_hours, min_daily_hours, avg_daily_hours,
+             has_lunch_break, max_daily_gaps, avg_gap_length,
+             schedule_span, compactness_ratio, weekday_only,
+             has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        )";
+
+        for (const auto& schedule : schedules) {
+            QVariantList values;
+            values << schedule.index                                             // 1
+                   << QString::fromStdString(DatabaseJsonHelpers::scheduleToJson(schedule)) // 2
+                   << schedule.amount_days                                       // 3
+                   << schedule.amount_gaps                                       // 4
+                   << schedule.gaps_time                                         // 5
+                   << schedule.avg_start                                         // 6
+                   << schedule.avg_end                                           // 7
+                   << schedule.earliest_start                                    // 8
+                   << schedule.latest_end                                        // 9
+                   << schedule.longest_gap                                       // 10
+                   << schedule.total_class_time                                  // 11
+                   << schedule.consecutive_days                                  // 12
+                   << QString::fromStdString(schedule.days_json)                 // 13
+                   << schedule.weekend_classes                                   // 14
+                   << schedule.has_morning_classes                               // 15
+                   << schedule.has_early_morning                                 // 16
+                   << schedule.has_evening_classes                               // 17
+                   << schedule.has_late_evening                                  // 18
+                   << schedule.max_daily_hours                                   // 19
+                   << schedule.min_daily_hours                                   // 20
+                   << schedule.avg_daily_hours                                   // 21
+                   << schedule.has_lunch_break                                   // 22
+                   << schedule.max_daily_gaps                                    // 23
+                   << schedule.avg_gap_length                                    // 24
+                   << schedule.schedule_span                                     // 25
+                   << schedule.compactness_ratio                                 // 26
+                   << schedule.weekday_only                                      // 27
+                   << schedule.has_monday                                        // 28
+                   << schedule.has_tuesday                                       // 29
+                   << schedule.has_wednesday                                     // 30
+                   << schedule.has_thursday                                      // 31
+                   << schedule.has_friday                                        // 32
+                   << schedule.has_saturday                                      // 33
+                   << schedule.has_sunday;                                       // 34
+
+            batchData.push_back(values);
+        }
+
+        // Execute batch insert
+        bool success = DatabaseUtils::executeBatch(db, insertQuery, batchData);
+
+        // Restore normal database settings
+        DatabaseUtils::restoreNormalSettings(db);
+
+        if (success) {
+            Logger::get().logInfo("Bulk insert completed successfully");
+        } else {
+            Logger::get().logError("Bulk insert failed");
+        }
+
+        return success;
+
+    } catch (const exception& e) {
+        Logger::get().logError("Exception during bulk insert: " + string(e.what()));
+        DatabaseUtils::restoreNormalSettings(db);
+        return false;
     }
-
-    Logger::get().logInfo("Retrieved " + to_string(sets.size()) + " schedule sets from database");
-    return sets;
 }
 
-bool DatabaseScheduleManager::deleteScheduleSet(int setId) {
+int DatabaseScheduleManager::getScheduleCount() {
     if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule set deletion");
-        return false;
+        return -1;
     }
 
-    // Get set details before deletion for logging
-    ScheduleSetEntity set = getScheduleSetById(setId);
-    if (set.id == 0) {
-        Logger::get().logError("Schedule set with ID " + to_string(setId) + " not found");
-        return false;
+    QSqlQuery query("SELECT COUNT(*) FROM schedule", db);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
     }
 
-    // Due to CASCADE DELETE, deleting the set will automatically delete all schedules
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM schedule_set WHERE id = ?");
-    query.addBindValue(setId);
+    return -1;
+}
 
-    if (!query.exec()) {
-        Logger::get().logError("Failed to delete schedule set: " + query.lastError().text().toStdString());
-        return false;
+vector<int> DatabaseScheduleManager::executeCustomQuery(const string& sqlQuery, const vector<string>& parameters) {
+    vector<int> scheduleIds;
+
+    if (!db.isOpen()) {
+        Logger::get().logError("Database not open for custom query");
+        return scheduleIds;
     }
 
-    int rowsAffected = query.numRowsAffected();
-    if (rowsAffected == 0) {
-        Logger::get().logWarning("No schedule set found with ID: " + to_string(setId));
-        return false;
+    // Validate the SQL query for security
+    SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(sqlQuery);
+    if (!validation.isValid) {
+        Logger::get().logError("SQL validation failed: " + validation.errorMessage);
+        return scheduleIds;
     }
 
-    Logger::get().logInfo("Schedule set deleted successfully: '" + set.set_name + "' (ID: " + to_string(setId) + ")");
-    return true;
+    try {
+        QSqlQuery query(db);
+
+        if (!query.prepare(QString::fromStdString(sqlQuery))) {
+            Logger::get().logError("Failed to prepare query: " + query.lastError().text().toStdString());
+            return scheduleIds;
+        }
+
+        for (const auto& param : parameters) {
+            query.addBindValue(QString::fromStdString(param));
+        }
+
+        if (!query.exec()) {
+            Logger::get().logError("Query execution failed: " + query.lastError().text().toStdString());
+            Logger::get().logError("Query was: " + sqlQuery);
+            return scheduleIds;
+        }
+
+        while (query.next()) {
+            QVariant idVariant = query.value(0);
+            bool ok;
+            int scheduleIndex = idVariant.toInt(&ok);
+
+            if (ok && scheduleIndex > 0) {
+                scheduleIds.push_back(scheduleIndex);
+            }
+        }
+
+        if (scheduleIds.empty()) {
+            Logger::get().logWarning("No schedules matched query criteria");
+        } else {
+            Logger::get().logInfo("Query matched " + std::to_string(scheduleIds.size()) + " schedules");
+        }
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception executing query: " + std::string(e.what()));
+    }
+
+    return scheduleIds;
+}
+
+vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesByIds(const vector<int>& scheduleIds) {
+    vector<InformativeSchedule> schedules;
+
+    if (!db.isOpen()) {
+        Logger::get().logError("Database not open for schedule retrieval by IDs");
+        return schedules;
+    }
+
+    if (scheduleIds.empty()) {
+        Logger::get().logWarning("No schedule IDs provided for retrieval");
+        return schedules;
+    }
+
+    try {
+        // Create IN clause for the query
+        QString inClause = "(";
+        for (size_t i = 0; i < scheduleIds.size(); ++i) {
+            if (i > 0) inClause += ",";
+            inClause += "?";
+        }
+        inClause += ")";
+
+        QString queryStr = QString(R"(
+            SELECT id, schedule_index, schedule_data_json,
+                   amount_days, amount_gaps, gaps_time, avg_start, avg_end,
+                   earliest_start, latest_end, longest_gap, total_class_time,
+                   consecutive_days, days_json, weekend_classes,
+                   has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
+                   max_daily_hours, min_daily_hours, avg_daily_hours,
+                   has_lunch_break, max_daily_gaps, avg_gap_length,
+                   schedule_span, compactness_ratio, weekday_only,
+                   has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
+            FROM schedule
+            WHERE schedule_index IN %1
+            ORDER BY schedule_index
+        )").arg(inClause);
+
+        QSqlQuery query(db);
+        if (!query.prepare(queryStr)) {
+            Logger::get().logError("Failed to prepare schedule retrieval query: " + query.lastError().text().toStdString());
+            return schedules;
+        }
+
+        // Bind schedule IDs
+        for (int id : scheduleIds) {
+            query.addBindValue(id);
+        }
+
+        if (!query.exec()) {
+            Logger::get().logError("Failed to execute schedule retrieval query: " + query.lastError().text().toStdString());
+            return schedules;
+        }
+
+        while (query.next()) {
+            schedules.push_back(createScheduleFromQuery(query));
+        }
+
+        Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules by IDs");
+
+    } catch (const exception& e) {
+        Logger::get().logError("Exception during schedule retrieval by IDs: " + string(e.what()));
+    }
+
+    return schedules;
+}
+
+string DatabaseScheduleManager::getSchedulesMetadataForBot() {
+    if (!db.isOpen()) {
+        Logger::get().logError("Database not open for metadata generation");
+        return "Database unavailable";
+    }
+
+    string metadata;
+
+    try {
+        metadata += "SCHEDULE DATABASE SCHEMA:\n";
+        metadata += "Table: schedule\n";
+        metadata += "Primary Key: id (internal database ID)\n";
+        metadata += "User Identifier: schedule_index (1-based schedule number for filtering)\n\n";
+
+        // Get statistics
+        QSqlQuery statsQuery(R"(
+            SELECT
+                COUNT(*) as total_schedules,
+                MIN(amount_days) as min_days, MAX(amount_days) as max_days,
+                MIN(amount_gaps) as min_gaps, MAX(amount_gaps) as max_gaps,
+                MIN(earliest_start) as min_earliest, MAX(earliest_start) as max_earliest,
+                MIN(latest_end) as min_latest, MAX(latest_end) as max_latest
+            FROM schedule
+        )", db);
+
+        if (statsQuery.exec() && statsQuery.next()) {
+            int totalSchedules = statsQuery.value("total_schedules").toInt();
+            metadata += "=== CURRENT DATA STATISTICS ===\n";
+            metadata += "Total schedules in database: " + std::to_string(totalSchedules) + "\n\n";
+
+            if (totalSchedules > 0) {
+                metadata += "VALUE RANGES:\n";
+                metadata += "- Study days: " + std::to_string(statsQuery.value("min_days").toInt()) +
+                            " to " + std::to_string(statsQuery.value("max_days").toInt()) + "\n";
+                metadata += "- Gaps: " + std::to_string(statsQuery.value("min_gaps").toInt()) +
+                            " to " + std::to_string(statsQuery.value("max_gaps").toInt()) + "\n";
+                metadata += "- Earliest start: " + std::to_string(statsQuery.value("min_earliest").toInt()) +
+                            " to " + std::to_string(statsQuery.value("max_earliest").toInt()) + " (minutes from midnight)\n";
+                metadata += "- Latest end: " + std::to_string(statsQuery.value("min_latest").toInt()) +
+                            " to " + std::to_string(statsQuery.value("max_latest").toInt()) + " (minutes from midnight)\n\n";
+            }
+        }
+
+        metadata += "=== TIME CONVERSION REFERENCE ===\n";
+        metadata += "Minutes from midnight conversions:\n";
+        metadata += "- 7:00 AM = 420   - 8:00 AM = 480   - 8:30 AM = 510   - 9:00 AM = 540\n";
+        metadata += "- 10:00 AM = 600  - 11:00 AM = 660  - 12:00 PM = 720  - 1:00 PM = 780\n";
+        metadata += "- 2:00 PM = 840   - 3:00 PM = 900   - 4:00 PM = 960   - 5:00 PM = 1020\n";
+        metadata += "- 6:00 PM = 1080  - 7:00 PM = 1140  - 8:00 PM = 1200  - 9:00 PM = 1260\n\n";
+
+        metadata += "=== AVAILABLE COLUMNS FOR FILTERING ===\n";
+        metadata += "Basic metrics: schedule_index, amount_days, amount_gaps, gaps_time, avg_start, avg_end\n";
+        metadata += "Time metrics: earliest_start, latest_end, longest_gap, total_class_time\n";
+        metadata += "Day patterns: consecutive_days, weekend_classes, weekday_only\n";
+        metadata += "Time preferences: has_morning_classes, has_early_morning, has_evening_classes, has_late_evening\n";
+        metadata += "Daily intensity: max_daily_hours, min_daily_hours, avg_daily_hours\n";
+        metadata += "Gap patterns: has_lunch_break, max_daily_gaps, avg_gap_length\n";
+        metadata += "Weekdays: has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday\n";
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception generating metadata: " + std::string(e.what()));
+        metadata += "Error generating metadata: " + std::string(e.what());
+    }
+
+    return metadata;
 }
 
 InformativeSchedule DatabaseScheduleManager::createScheduleFromQuery(QSqlQuery& query) {
@@ -423,7 +462,7 @@ InformativeSchedule DatabaseScheduleManager::createScheduleFromQuery(QSqlQuery& 
     int avgStart = query.value(6).toInt();
     int avgEnd = query.value(7).toInt();
 
-    // Enhanced metrics (add these after the basic metrics in your SELECT query)
+    // Enhanced metrics
     int earliestStart = query.value(8).toInt();
     int latestEnd = query.value(9).toInt();
     int longestGap = query.value(10).toInt();
@@ -489,461 +528,6 @@ InformativeSchedule DatabaseScheduleManager::createScheduleFromQuery(QSqlQuery& 
     return schedule;
 }
 
-ScheduleSetEntity DatabaseScheduleManager::createScheduleSetFromQuery(QSqlQuery& query) {
-    ScheduleSetEntity set;
-    set.id = query.value(0).toInt();
-    set.set_name = query.value(1).toString().toStdString();
-    set.source_file_ids_json = query.value(2).toString().toStdString();
-    set.schedule_count = query.value(3).toInt();
-    set.created_at = query.value(4).toDateTime();
-    set.updated_at = query.value(5).toDateTime();
-    return set;
-}
-
-bool DatabaseScheduleManager::updateScheduleSetCount(int setId) {
-    QSqlQuery countQuery(db);
-    countQuery.prepare("SELECT COUNT(*) FROM schedule WHERE schedule_set_id = ?");
-    countQuery.addBindValue(setId);
-
-    if (!countQuery.exec() || !countQuery.next()) {
-        Logger::get().logWarning("Failed to count schedules for set ID: " + to_string(setId));
-        return false;
-    }
-
-    int count = countQuery.value(0).toInt();
-
-    QSqlQuery updateQuery(db);
-    updateQuery.prepare("UPDATE schedule_set SET schedule_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-    updateQuery.addBindValue(count);
-    updateQuery.addBindValue(setId);
-
-    return updateQuery.exec();
-}
-
-int DatabaseScheduleManager::getScheduleCount() {
-    if (!db.isOpen()) {
-        return -1;
-    }
-
-    QSqlQuery query("SELECT COUNT(*) FROM schedule", db);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-
-    return -1;
-}
-
-int DatabaseScheduleManager::getScheduleCountBySetId(int setId) {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule count by set ID");
-        return -1;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM schedule WHERE schedule_set_id = ?");
-    query.addBindValue(setId);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-
-    Logger::get().logError("Failed to get schedule count for set ID: " + to_string(setId));
-    return -1;
-}
-
-bool DatabaseScheduleManager::scheduleSetExists(int setId) {
-    if (!db.isOpen()) {
-        return false;
-    }
-
-    QSqlQuery query(db);
-    query.prepare("SELECT COUNT(*) FROM schedule_set WHERE id = ?");
-    query.addBindValue(setId);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt() > 0;
-    }
-
-    return false;
-}
-
-int DatabaseScheduleManager::getScheduleSetCount() {
-    if (!db.isOpen()) {
-        return -1;
-    }
-
-    QSqlQuery query("SELECT COUNT(*) FROM schedule_set", db);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-
-    return -1;
-}
-
-ScheduleSetEntity DatabaseScheduleManager::getScheduleSetById(int setId) {
-    ScheduleSetEntity set;
-
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule set retrieval");
-        return set;
-    }
-
-    QSqlQuery query(db);
-    query.prepare(R"(
-        SELECT id, set_name, source_file_ids_json, schedule_count, created_at, updated_at
-        FROM schedule_set
-        WHERE id = ?
-    )");
-    query.addBindValue(setId);
-
-    if (query.exec() && query.next()) {
-        set = createScheduleSetFromQuery(query);
-    } else {
-        Logger::get().logWarning("No schedule set found with ID: " + to_string(setId));
-    }
-
-    return set;
-}
-
-map<string, int> DatabaseScheduleManager::getScheduleStatistics() {
-    map<string, int> stats;
-
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for statistics");
-        return stats;
-    }
-
-    // Get basic counts
-    stats["total_sets"] = getScheduleSetCount();
-    stats["total_schedules"] = getScheduleCount();
-
-    // Get average schedules per set
-    QSqlQuery avgQuery("SELECT AVG(schedule_count) FROM schedule_set", db);
-    if (avgQuery.exec() && avgQuery.next()) {
-        stats["avg_schedules_per_set"] = avgQuery.value(0).toInt();
-    }
-
-    // Get schedules created in last 24 hours
-    QSqlQuery recentQuery(R"(
-        SELECT COUNT(*) FROM schedule
-        WHERE created_at >= datetime('now', '-1 day')
-    )", db);
-    if (recentQuery.exec() && recentQuery.next()) {
-        stats["schedules_last_24h"] = recentQuery.value(0).toInt();
-    }
-
-    // Get sets created in last 7 days
-    QSqlQuery setsQuery(R"(
-        SELECT COUNT(*) FROM schedule_set
-        WHERE created_at >= datetime('now', '-7 days')
-    )", db);
-    if (setsQuery.exec() && setsQuery.next()) {
-        stats["sets_last_7_days"] = setsQuery.value(0).toInt();
-    }
-
-    return stats;
-}
-
-bool DatabaseScheduleManager::insertSchedulesBulk(const vector<InformativeSchedule>& schedules, int setId) {
-    if (!db.isOpen() || schedules.empty()) {
-        return false;
-    }
-
-    Logger::get().logInfo("Starting bulk insert of " + to_string(schedules.size()) + " schedules");
-
-    // Optimize database for bulk operations
-    DatabaseUtils::optimizeForBulkInserts(db);
-
-    try {
-        // Prepare batch data
-        vector<QVariantList> batchData;
-        batchData.reserve(schedules.size());
-
-        const QString insertQuery = R"(
-            INSERT INTO schedule
-            (schedule_set_id, schedule_index, schedule_data_json,
-             amount_days, amount_gaps, gaps_time, avg_start, avg_end,
-             earliest_start, latest_end, longest_gap, total_class_time,
-             consecutive_days, days_json, weekend_classes,
-             has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
-             max_daily_hours, min_daily_hours, avg_daily_hours,
-             has_lunch_break, max_daily_gaps, avg_gap_length,
-             schedule_span, compactness_ratio, weekday_only,
-             has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
-             created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        )";
-
-        for (const auto& schedule : schedules) {
-            QVariantList values;
-            values << setId                                                      // 1
-                   << schedule.index                                             // 2
-                   << QString::fromStdString(DatabaseJsonHelpers::scheduleToJson(schedule)) // 3
-                   << schedule.amount_days                                       // 4
-                   << schedule.amount_gaps                                       // 5
-                   << schedule.gaps_time                                         // 6
-                   << schedule.avg_start                                         // 7
-                   << schedule.avg_end                                           // 8
-                   << schedule.earliest_start                                    // 9
-                   << schedule.latest_end                                        // 10
-                   << schedule.longest_gap                                       // 11
-                   << schedule.total_class_time                                  // 12
-                   << schedule.consecutive_days                                  // 13
-                   << QString::fromStdString(schedule.days_json)                 // 14
-                   << schedule.weekend_classes                                   // 15
-                   << schedule.has_morning_classes                               // 16
-                   << schedule.has_early_morning                                 // 17
-                   << schedule.has_evening_classes                               // 18
-                   << schedule.has_late_evening                                  // 19
-                   << schedule.max_daily_hours                                   // 20
-                   << schedule.min_daily_hours                                   // 21
-                   << schedule.avg_daily_hours                                   // 22
-                   << schedule.has_lunch_break                                   // 23
-                   << schedule.max_daily_gaps                                    // 24
-                   << schedule.avg_gap_length                                    // 25
-                   << schedule.schedule_span                                     // 26
-                   << schedule.compactness_ratio                                 // 27
-                   << schedule.weekday_only                                      // 28
-                   << schedule.has_monday                                        // 29
-                   << schedule.has_tuesday                                       // 30
-                   << schedule.has_wednesday                                     // 31
-                   << schedule.has_thursday                                      // 32
-                   << schedule.has_friday                                        // 33
-                   << schedule.has_saturday                                      // 34
-                   << schedule.has_sunday;                                       // 35
-
-            batchData.push_back(values);
-        }
-
-        // Execute batch insert
-        bool success = DatabaseUtils::executeBatch(db, insertQuery, batchData);
-
-        // Restore normal database settings
-        DatabaseUtils::restoreNormalSettings(db);
-
-        if (success) {
-            // Update schedule count in set
-            updateScheduleSetCount(setId);
-            Logger::get().logInfo("Bulk insert completed successfully");
-        } else {
-            Logger::get().logError("Bulk insert failed");
-        }
-
-        return success;
-
-    } catch (const exception& e) {
-        Logger::get().logError("Exception during bulk insert: " + string(e.what()));
-        DatabaseUtils::restoreNormalSettings(db);
-        return false;
-    }
-}
-
-vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
-    return {};
-}
-
-vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesByMetrics(int maxDays, int maxGaps, int maxGapTime,
-                                                                           int minAvgStart, int maxAvgStart,
-                                                                           int minAvgEnd, int maxAvgEnd) {
-    return {};
-}
-
-vector<int> DatabaseScheduleManager::executeCustomQuery(const string& sqlQuery, const vector<string>& parameters) {
-    vector<int> scheduleIds;
-
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for custom query");
-        return scheduleIds;
-    }
-
-    // Validate the SQL query for security
-    SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(sqlQuery);
-    if (!validation.isValid) {
-        Logger::get().logError("SQL validation failed: " + validation.errorMessage);
-        return scheduleIds;
-    }
-
-    try {
-        QSqlQuery query(db);
-
-        if (!query.prepare(QString::fromStdString(sqlQuery))) {
-            Logger::get().logError("Failed to prepare query: " + query.lastError().text().toStdString());
-            return scheduleIds;
-        }
-
-        for (const auto& param : parameters) {
-            query.addBindValue(QString::fromStdString(param));
-        }
-
-        if (!query.exec()) {
-            Logger::get().logError("Query execution failed: " + query.lastError().text().toStdString());
-            Logger::get().logError("Query was: " + sqlQuery);
-            return scheduleIds;
-        }
-
-        while (query.next()) {
-            QVariant idVariant = query.value(0);
-            bool ok;
-            int scheduleIndex = idVariant.toInt(&ok);
-
-            if (ok && scheduleIndex > 0) {
-                scheduleIds.push_back(scheduleIndex);
-            }
-        }
-
-        // Only log result count, not details
-        if (scheduleIds.empty()) {
-            Logger::get().logWarning("No schedules matched query criteria");
-
-            Logger::get().logError("Query execution failed: " + query.lastError().text().toStdString());
-
-            // Debug: Check if column exists
-            QSqlQuery debugQuery("PRAGMA table_info(schedule)", db);
-            Logger::get().logInfo("=== SCHEDULE TABLE COLUMNS ===");
-            while (debugQuery.next()) {
-                QString columnName = debugQuery.value(1).toString();
-                Logger::get().logInfo("Column: " + columnName.toStdString());
-            }
-
-            // Debug: Check if we have any schedule data
-            QSqlQuery countQuery("SELECT COUNT(*), MIN(earliest_start), MAX(earliest_start) FROM schedule", db);
-            if (countQuery.exec() && countQuery.next()) {
-                int count = countQuery.value(0).toInt();
-                int minStart = countQuery.value(1).toInt();
-                int maxStart = countQuery.value(2).toInt();
-                Logger::get().logInfo("Schedules: " + std::to_string(count) +
-                                      ", earliest_start range: " + std::to_string(minStart) +
-                                      " to " + std::to_string(maxStart));
-            }
-        } else {
-            Logger::get().logInfo("Query matched " + std::to_string(scheduleIds.size()) + " schedules");
-        }
-
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception executing query: " + std::string(e.what()));
-    }
-
-    return scheduleIds;
-}
-
-vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesByIds(const vector<int>& scheduleIds) {
-    vector<InformativeSchedule> schedules;
-
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule retrieval by IDs");
-        return schedules;
-    }
-
-    if (scheduleIds.empty()) {
-        Logger::get().logWarning("No schedule IDs provided for retrieval");
-        return schedules;
-    }
-
-    try {
-        // Create IN clause for the query
-        QString inClause = "(";
-        for (size_t i = 0; i < scheduleIds.size(); ++i) {
-            if (i > 0) inClause += ",";
-            inClause += "?";
-        }
-        inClause += ")";
-
-        QString queryStr = QString(R"(
-            SELECT id, schedule_index, schedule_data_json, amount_days, amount_gaps,
-                   gaps_time, avg_start, avg_end
-            FROM schedule
-            WHERE schedule_index IN %1
-            ORDER BY schedule_index
-        )").arg(inClause);
-
-        QSqlQuery query(db);
-        if (!query.prepare(queryStr)) {
-            Logger::get().logError("Failed to prepare schedule retrieval query: " + query.lastError().text().toStdString());
-            return schedules;
-        }
-
-        // Bind schedule IDs
-        for (int id : scheduleIds) {
-            query.addBindValue(id);
-        }
-
-        if (!query.exec()) {
-            Logger::get().logError("Failed to execute schedule retrieval query: " + query.lastError().text().toStdString());
-            return schedules;
-        }
-
-        while (query.next()) {
-            schedules.push_back(createScheduleFromQuery(query));
-        }
-
-        Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules by IDs");
-
-    } catch (const exception& e) {
-        Logger::get().logError("Exception during schedule retrieval by IDs: " + string(e.what()));
-    }
-
-    return schedules;
-}
-
-string DatabaseScheduleManager::getSchedulesMetadataForBot() {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for metadata generation");
-        return "Database unavailable";
-    }
-
-    string metadata;
-
-    try {
-        // Just build the metadata without excessive logging
-        metadata += "ENHANCED SCHEDULE DATABASE SCHEMA:\n";
-        metadata += "Table: schedule\n";
-        metadata += "Primary Key: id (internal database ID)\n";
-        metadata += "User Identifier: schedule_index (1-based schedule number for filtering)\n\n";
-
-        // ... rest of metadata construction without Logger::get().logInfo calls ...
-
-        // Get statistics but don't log every step
-        QSqlQuery statsQuery(R"(
-            SELECT
-                COUNT(*) as total_schedules,
-                MIN(amount_days) as min_days, MAX(amount_days) as max_days,
-                MIN(amount_gaps) as min_gaps, MAX(amount_gaps) as max_gaps,
-                MIN(earliest_start) as min_earliest, MAX(earliest_start) as max_earliest,
-                MIN(latest_end) as min_latest, MAX(latest_end) as max_latest
-            FROM schedule
-        )", db);
-
-        if (statsQuery.exec() && statsQuery.next()) {
-            int totalSchedules = statsQuery.value("total_schedules").toInt();
-            metadata += "=== CURRENT DATA STATISTICS ===\n";
-            metadata += "Total schedules in database: " + std::to_string(totalSchedules) + "\n\n";
-
-            // Add ranges without logging each one
-            if (totalSchedules > 0) {
-                metadata += "VALUE RANGES:\n";
-                metadata += "- Study days: " + std::to_string(statsQuery.value("min_days").toInt()) +
-                            " to " + std::to_string(statsQuery.value("max_days").toInt()) + "\n";
-                // ... etc without individual logs
-            }
-        }
-
-        // Add time conversion and examples without logging
-        metadata += "=== TIME CONVERSION REFERENCE ===\n";
-        metadata += "Minutes from midnight conversions:\n";
-        metadata += "- 7:00 AM = 420   - 8:00 AM = 480   - 8:30 AM = 510   - 9:00 AM = 540\n";
-        // ... rest of metadata
-
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception generating metadata: " + std::string(e.what()));
-        metadata += "Error generating metadata: " + std::string(e.what());
-    }
-
-    return metadata;
-}
-
 bool DatabaseScheduleManager::isValidScheduleQuery(const string& sqlQuery) {
     QString query = QString::fromStdString(sqlQuery).trimmed().toLower();
 
@@ -979,22 +563,24 @@ bool DatabaseScheduleManager::isValidScheduleQuery(const string& sqlQuery) {
         return false;
     }
 
-    // Check for valid columns only
-    vector<string> validColumns = getWhitelistedColumns();
-
-    // Basic validation passed
-    Logger::get().logInfo("SQL query validation passed: " + sqlQuery);
     return true;
 }
 
 vector<string> DatabaseScheduleManager::getWhitelistedTables() {
-    return {"schedule", "schedule_set"};
+    return {"schedule"};
 }
 
 vector<string> DatabaseScheduleManager::getWhitelistedColumns() {
     return {
             "schedule_index", "amount_days", "amount_gaps", "gaps_time",
-            "avg_start", "avg_end", "id", "schedule_set_id", "created_at"
+            "avg_start", "avg_end", "id", "created_at", "earliest_start",
+            "latest_end", "longest_gap", "total_class_time", "consecutive_days",
+            "weekend_classes", "has_morning_classes", "has_early_morning",
+            "has_evening_classes", "has_late_evening", "max_daily_hours",
+            "min_daily_hours", "avg_daily_hours", "has_lunch_break",
+            "max_daily_gaps", "avg_gap_length", "schedule_span",
+            "compactness_ratio", "weekday_only", "has_monday", "has_tuesday",
+            "has_wednesday", "has_thursday", "has_friday", "has_saturday", "has_sunday"
     };
 }
 
@@ -1006,14 +592,13 @@ void DatabaseScheduleManager::debugScheduleQuery(const string& debugQuery) {
 
     Logger::get().logInfo("=== DEBUG SCHEDULE QUERY ===");
 
-    // First, let's check what data we actually have
+    // Check what data we actually have
     QSqlQuery dataQuery(R"(
         SELECT
             schedule_index,
             earliest_start,
             avg_start,
-            amount_days,
-            schedule_data_json
+            amount_days
         FROM schedule
         ORDER BY earliest_start
         LIMIT 10
@@ -1035,7 +620,7 @@ void DatabaseScheduleManager::debugScheduleQuery(const string& debugQuery) {
         }
     }
 
-    // Check the specific query that should work for "start after 10 AM"
+    // Test a simple query
     Logger::get().logInfo("Testing query: SELECT schedule_index FROM schedule WHERE earliest_start > 600");
 
     QSqlQuery testQuery(db);
