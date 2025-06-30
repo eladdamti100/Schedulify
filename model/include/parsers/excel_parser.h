@@ -40,11 +40,11 @@ using namespace OpenXLSX;
 
 class ExcelCourseParser {
 private:
-    unordered_map<string, int> dayMap;
-    unordered_map<string, SessionType> sessionTypeMap;
+    map<string, int> dayMap;
+    map<string, SessionType> sessionTypeMap;
 
-public:
-    ExcelCourseParser();
+    // Helper method to determine semester number from Hebrew period string
+    int getSemesterNumber(const string& period);
 
     // Parse multiple rooms from single cell
     vector<string> parseMultipleRooms(const string& roomStr);
@@ -52,20 +52,23 @@ public:
     // Parse multiple time slots and match each with corresponding room
     vector<Session> parseMultipleSessions(const string& timeSlotStr, const string& roomStr, const string& teacher);
 
-    // Parse single session
+    // Parse a single session from time slot and room strings
     Session parseSingleSession(const string& timeSlotStr, const string& roomStr, const string& teacher);
 
-    // Get session type mapping
+    // Get session type from Hebrew string
     SessionType getSessionType(const string& hebrewType);
 
-    // Parse course code from full code
+    // Parse course code from full code string
     pair<string, string> parseCourseCode(const string& fullCode);
 
-    // Main parsing function
+public:
+    ExcelCourseParser();
+
+    // Main parsing method
     vector<Course> parseExcelFile(const string& filename);
 };
 
-// Utility functions
+// Utility function to get Hebrew day name
 string getDayName(int dayOfWeek);
 
 #endif // EXCEL_PARSER_H

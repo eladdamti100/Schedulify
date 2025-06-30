@@ -43,6 +43,10 @@ Page {
         }
     }
 
+    // Semester navigation properties
+    property string currentSemester: controller ? controller.getCurrentSemester() : "A"
+    property bool allSemestersLoaded: controller ? controller.allSemestersLoaded : false
+
     MouseArea {
         id: outsideClickArea
         anchors.fill: parent
@@ -97,6 +101,54 @@ Page {
         }
     }
 
+    // Connections for semester management
+    Connections {
+        target: controller
+        function onCurrentSemesterChanged() {
+            currentSemester = controller.getCurrentSemester()
+            totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
+        }
+        function onAllSemestersReady() {
+            allSemestersLoaded = true
+        }
+        function onSemesterSchedulesLoaded(semester) {
+            // Update button states when new semester data is loaded
+        }
+    }
+    Connections {
+        target: controller
+        function onSemesterLoadingStateChanged(semester) {
+            // Force re-evaluation of button states when loading state changes
+            if (semester === "A") {
+                semesterAButton.isLoading = controller.isSemesterLoading("A")
+                semesterAButton.isEnabled = controller.canClickSemester("A")
+            } else if (semester === "B") {
+                semesterBButton.isLoading = controller.isSemesterLoading("B")
+                semesterBButton.isEnabled = controller.canClickSemester("B")
+            } else if (semester === "SUMMER") {
+                semesterSummerButton.isLoading = controller.isSemesterLoading("SUMMER")
+                semesterSummerButton.isEnabled = controller.canClickSemester("SUMMER")
+            }
+        }
+
+        function onSemesterFinishedStateChanged(semester) {
+            // Force re-evaluation of button states when finished state changes
+            if (semester === "A") {
+                semesterAButton.isFinished = controller.isSemesterFinished("A")
+                semesterAButton.isEnabled = controller.canClickSemester("A")
+                semesterAButton.isAvailable = controller.hasSchedulesForSemester("A")
+            } else if (semester === "B") {
+                semesterBButton.isFinished = controller.isSemesterFinished("B")
+                semesterBButton.isEnabled = controller.canClickSemester("B")
+                semesterBButton.isAvailable = controller.hasSchedulesForSemester("B")
+            } else if (semester === "SUMMER") {
+                semesterSummerButton.isFinished = controller.isSemesterFinished("SUMMER")
+                semesterSummerButton.isEnabled = controller.canClickSemester("SUMMER")
+                semesterSummerButton.isAvailable = controller.hasSchedulesForSemester("SUMMER")
+            }
+        }
+    }
+
     onDayColumnWidthChanged: {
         if (tableModel) {
             tableModel.updateRows()
@@ -113,7 +165,7 @@ Page {
     Rectangle {
         id: header
         width: parent.width
-        height: 80
+        height: 110  // Reduced height since schedule navigation is now in the top row
         color: "#ffffff"
         border.color: "#e5e7eb"
 
@@ -121,42 +173,56 @@ Page {
             anchors {
                 left: parent.left
                 right: parent.right
-                verticalCenter: parent.verticalCenter
+                top: parent.top
+                bottom: parent.bottom
+                margins: 15
             }
-            height: coursesBackButton.height
 
-            Button {
-                id: coursesBackButton
-                width: 40
-                height: 40
+            // Top row now contains back button, title, schedule navigation, and action buttons
+            Item {
+                id: topRow
                 anchors {
                     left: parent.left
-                    leftMargin: 15
-                    verticalCenter: parent.verticalCenter
+                    right: parent.right
+                    top: parent.top
                 }
-                background: Rectangle {
-                    color: coursesBackMouseArea.containsMouse ? "#a8a8a8" : "#f3f4f6"
-                    radius: 4
-                }
-                contentItem: Text {
-                    text: "←"
-                    font.pixelSize: 18
-                    color: "#1f2937"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                MouseArea {
-                    id: coursesBackMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: controller.goBack()
-                    cursorShape: Qt.PointingHandCursor
-                }
+                height: 40
 
-                Component.onCompleted: {
-                    forceActiveFocus();
-                }
-            }
+                // Left side: Back button and title
+                Row {
+                    anchors {
+                        left: parent.left
+                        verticalCenter: parent.verticalCenter
+                    }
+                    spacing: 16
+
+                    Button {
+                        id: coursesBackButton
+                        width: 40
+                        height: 40
+                        background: Rectangle {
+                            color: coursesBackMouseArea.containsMouse ? "#a8a8a8" : "#f3f4f6"
+                            radius: 4
+                        }
+                        contentItem: Text {
+                            text: "←"
+                            font.pixelSize: 18
+                            color: "#1f2937"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        MouseArea {
+                            id: coursesBackMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: controller.goBack()
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        Component.onCompleted: {
+                            forceActiveFocus();
+                        }
+                    }
 
             // Title with filter indicator
             RowLayout {
@@ -261,8 +327,8 @@ Page {
                         Rectangle {
                             id: prevButton
                             radius: 6
-                            width: 36
-                            height: 36
+                            width: 32  // Slightly smaller to fit
+                            height: 32
 
                             property bool isPrevEnabled: scheduleModel && totalSchedules > 0 ? scheduleModel.canGoPrevious : false
 
@@ -277,7 +343,7 @@ Page {
                                 text: "←"
                                 anchors.centerIn: parent
                                 color: parent.isPrevEnabled ? "white" : "#9ca3af"
-                                font.pixelSize: 16
+                                font.pixelSize: 14
                                 font.bold: true
                             }
 
@@ -297,14 +363,14 @@ Page {
 
                         Label {
                             text: "Schedule"
-                            font.pixelSize: 15
+                            font.pixelSize: 13  // Slightly smaller
                             font.weight: Font.Medium
                             color: "#475569"
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: Math.max(inputField.contentWidth + 24, 60)
-                            Layout.preferredHeight: 40
+                            Layout.preferredWidth: Math.max(inputField.contentWidth + 20, 50)  // Slightly smaller
+                            Layout.preferredHeight: 32
 
                             color: "#ffffff"
                             radius: 8
@@ -329,14 +395,14 @@ Page {
                                 }
 
                                 color: "#1f2937"
-                                font.pixelSize: 14
+                                font.pixelSize: 12  // Slightly smaller
                                 font.weight: Font.Medium
                                 horizontalAlignment: TextInput.AlignHCenter
 
-                                leftPadding: 12
-                                rightPadding: 12
-                                topPadding: 8
-                                bottomPadding: 8
+                                leftPadding: 8
+                                rightPadding: 8
+                                topPadding: 6
+                                bottomPadding: 6
 
                                 selectByMouse: true
 
@@ -394,14 +460,14 @@ Page {
 
                         Label {
                             text: "of"
-                            font.pixelSize: 15
+                            font.pixelSize: 13  // Slightly smaller
                             font.weight: Font.Medium
                             color: "#475569"
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: Math.max(totalLabel.implicitWidth + 16, 80)
-                            Layout.preferredHeight: 32
+                            Layout.preferredWidth: totalLabel.implicitWidth + 12
+                            Layout.preferredHeight: 28  // Smaller
 
                             color: totalSchedules > 0 ? "#dbeafe" : "#f1f5f9"
                             radius: 6
@@ -427,8 +493,8 @@ Page {
                         Rectangle {
                             id: nextButton
                             radius: 6
-                            width: 36
-                            height: 36
+                            width: 32  // Slightly smaller
+                            height: 32
 
                             property bool isNextEnabled: scheduleModel && totalSchedules > 0 ? scheduleModel.canGoNext : false
 
@@ -443,7 +509,7 @@ Page {
                                 text: "→"
                                 anchors.centerIn: parent
                                 color: parent.isNextEnabled ? "white" : "#9ca3af"
-                                font.pixelSize: 16
+                                font.pixelSize: 14
                                 font.bold: true
                             }
 
@@ -730,6 +796,268 @@ Page {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: sortMenu.open()
                 }
+                    }
+                }
+            }
+
+            // Semester selector positioned below the top row
+            Item {
+                id: semesterRow
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: topRow.bottom
+                    topMargin: 15
+                }
+                height: 50
+
+                Rectangle {
+                    id: semesterSelectorBackground
+                    anchors.centerIn: parent
+                    width: semesterButtons.implicitWidth + 24
+                    height: 50
+                    color: "#f8fafc"
+                    radius: 12
+                    border.color: "#e2e8f0"
+                    border.width: 1
+
+                    RowLayout {
+                        id: semesterButtons
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        // Semester A Button
+                        Rectangle {
+                            id: semesterAButton
+                            Layout.preferredWidth: 100
+                            Layout.preferredHeight: 36
+                            radius: 8
+
+                            property bool isAvailable: controller ? controller.hasSchedulesForSemester("A") : false
+                            property bool isLoading: controller ? controller.isSemesterLoading("A") : false
+                            property bool isFinished: controller ? controller.isSemesterFinished("A") : false
+                            property bool isActive: currentSemester === "A"
+                            property bool isEnabled: controller ? controller.canClickSemester("A") : false
+
+                            color: {
+                                if (!isFinished && !isLoading) return "#f1f5f9"  // Not started
+                                if (isLoading) return "#fef3c7"  // Loading state
+                                if (!isEnabled) return "#f1f5f9"  // Disabled
+                                if (isActive) return "#3b82f6"   // Active
+                                return semesterAMouseArea.containsMouse ? "#dbeafe" : "#ffffff"  // Available
+                            }
+
+                            border.color: {
+                                if (isLoading) return "#f59e0b"  // Orange border while loading
+                                if (!isEnabled) return "#e2e8f0"
+                                if (isActive) return "#2563eb"
+                                return "#cbd5e1"
+                            }
+                            border.width: isActive ? 2 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Semester A"
+                                font.pixelSize: 14
+                                font.weight: Font.Medium
+                                color: {
+                                    if (isLoading) return "#92400e"  // Dark orange while loading
+                                    if (!parent.isEnabled) return "#94a3b8"
+                                    if (parent.isActive) return "#ffffff"
+                                    return "#475569"
+                                }
+                            }
+
+                            MouseArea {
+                                id: semesterAMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: parent.isEnabled
+                                cursorShape: parent.isEnabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+                                enabled: parent.isEnabled
+                                onClicked: {
+                                    if (controller) {
+                                        controller.switchToSemester("A")
+                                    }
+                                }
+                            }
+
+                            // Loading indicator for Semester A
+                            Rectangle {
+                                visible: parent.isLoading
+                                anchors {
+                                    right: parent.right
+                                    top: parent.top
+                                    margins: 4
+                                }
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: "#f59e0b"
+
+                                SequentialAnimation on opacity {
+                                    running: parent.visible
+                                    loops: Animation.Infinite
+                                    NumberAnimation { to: 0.3; duration: 500 }
+                                    NumberAnimation { to: 1.0; duration: 500 }
+                                }
+                            }
+                        }
+
+                        // Semester B Button
+                        Rectangle {
+                            id: semesterBButton
+                            Layout.preferredWidth: 100
+                            Layout.preferredHeight: 36
+                            radius: 8
+
+                            property bool isAvailable: controller ? controller.hasSchedulesForSemester("B") : false
+                            property bool isLoading: controller ? controller.isSemesterLoading("B") : false
+                            property bool isFinished: controller ? controller.isSemesterFinished("B") : false
+                            property bool isActive: currentSemester === "B"
+                            property bool isEnabled: controller ? controller.canClickSemester("B") : false
+
+                            color: {
+                                if (!isFinished && !isLoading) return "#f1f5f9"  // Not started
+                                if (isLoading) return "#fef3c7"  // Loading state
+                                if (!isEnabled) return "#f1f5f9"  // Disabled
+                                if (isActive) return "#3b82f6"   // Active
+                                return semesterBMouseArea.containsMouse ? "#dbeafe" : "#ffffff"  // Available
+                            }
+
+                            border.color: {
+                                if (isLoading) return "#f59e0b"  // Orange border while loading
+                                if (!isEnabled) return "#e2e8f0"
+                                if (isActive) return "#2563eb"
+                                return "#cbd5e1"
+                            }
+                            border.width: isActive ? 2 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Semester B"
+                                font.pixelSize: 14
+                                font.weight: Font.Medium
+                                color: {
+                                    if (isLoading) return "#92400e"  // Dark orange while loading
+                                    if (!parent.isEnabled) return "#94a3b8"
+                                    if (parent.isActive) return "#ffffff"
+                                    return "#475569"
+                                }
+                            }
+
+                            MouseArea {
+                                id: semesterBMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: parent.isEnabled
+                                cursorShape: parent.isEnabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+                                enabled: parent.isEnabled
+                                onClicked: {
+                                    if (controller) {
+                                        controller.switchToSemester("B")
+                                    }
+                                }
+                            }
+
+                            // Loading indicator for Semester B
+                            Rectangle {
+                                visible: parent.isLoading
+                                anchors {
+                                    right: parent.right
+                                    top: parent.top
+                                    margins: 4
+                                }
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: "#f59e0b"
+
+                                SequentialAnimation on opacity {
+                                    running: parent.visible
+                                    loops: Animation.Infinite
+                                    NumberAnimation { to: 0.3; duration: 500 }
+                                    NumberAnimation { to: 1.0; duration: 500 }
+                                }
+                            }
+                        }
+
+                        // Summer Semester Button
+                        Rectangle {
+                            id: semesterSummerButton
+                            Layout.preferredWidth: 120
+                            Layout.preferredHeight: 36
+                            radius: 8
+
+                            property bool isAvailable: controller ? controller.hasSchedulesForSemester("SUMMER") : false
+                            property bool isLoading: controller ? controller.isSemesterLoading("SUMMER") : false
+                            property bool isFinished: controller ? controller.isSemesterFinished("SUMMER") : false
+                            property bool isActive: currentSemester === "SUMMER"
+                            property bool isEnabled: controller ? controller.canClickSemester("SUMMER") : false
+
+                            color: {
+                                if (!isFinished && !isLoading) return "#f1f5f9"  // Not started
+                                if (isLoading) return "#fef3c7"  // Loading state
+                                if (!isEnabled) return "#f1f5f9"  // Disabled
+                                if (isActive) return "#3b82f6"   // Active
+                                return semesterSummerMouseArea.containsMouse ? "#dbeafe" : "#ffffff"  // Available
+                            }
+
+                            border.color: {
+                                if (isLoading) return "#f59e0b"  // Orange border while loading
+                                if (!isEnabled) return "#e2e8f0"
+                                if (isActive) return "#2563eb"
+                                return "#cbd5e1"
+                            }
+                            border.width: isActive ? 2 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Summer"
+                                font.pixelSize: 14
+                                font.weight: Font.Medium
+                                color: {
+                                    if (isLoading) return "#92400e"  // Dark orange while loading
+                                    if (!parent.isEnabled) return "#94a3b8"
+                                    if (parent.isActive) return "#ffffff"
+                                    return "#475569"
+                                }
+                            }
+
+                            MouseArea {
+                                id: semesterSummerMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: parent.isEnabled
+                                cursorShape: parent.isEnabled ? Qt.PointingHandCursor : Qt.ForbiddenCursor
+                                enabled: parent.isEnabled
+                                onClicked: {
+                                    if (controller) {
+                                        controller.switchToSemester("SUMMER")
+                                    }
+                                }
+                            }
+
+                            // Loading indicator for Summer
+                            Rectangle {
+                                visible: parent.isLoading
+                                anchors {
+                                    right: parent.right
+                                    top: parent.top
+                                    margins: 4
+                                }
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: "#f59e0b"
+
+                                SequentialAnimation on opacity {
+                                    running: parent.visible
+                                    loops: Animation.Infinite
+                                    NumberAnimation { to: 0.3; duration: 500 }
+                                    NumberAnimation { to: 1.0; duration: 500 }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -769,7 +1097,7 @@ Page {
         }
     }
 
-    // Main content with animated resizing
+    // Main content
     Rectangle{
         id: mainContent
         anchors {
@@ -889,6 +1217,35 @@ Page {
                         horizontalAlignment: Text.AlignHCenter
                     }
                 }
+
+                // Loading animation when schedules are being generated
+                Rectangle {
+                    visible: !controller || !controller.hasSchedulesForSemester(currentSemester)
+                    anchors {
+                        horizontalCenter: parent.horizontalCenter
+                        top: parent.verticalCenter
+                        topMargin: 40
+                    }
+                    width: 32
+                    height: 32
+                    radius: 16
+                    color: "#3b82f6"
+
+                    SequentialAnimation on opacity {
+                        running: parent.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.3; duration: 800 }
+                        NumberAnimation { to: 1.0; duration: 800 }
+                    }
+
+                    RotationAnimator on rotation {
+                        running: parent.visible
+                        from: 0
+                        to: 360
+                        duration: 2000
+                        loops: Animation.Infinite
+                    }
+                }
             }
 
             Column {
@@ -956,7 +1313,7 @@ Page {
                     }
                 }
 
-                // Schedule table - uses tableContent's calculated widths
+                // Schedule table
                 TableView {
                     id: scheduleTable
                     width: parent.width
@@ -1107,11 +1464,18 @@ Page {
                             }
 
                             switch(itemType) {
-                                case "Lecture": return "#b0e8ff";
-                                case "Lab": return "#abffc6";
-                                case "Tutorial": return "#edc8ff";
-                                case "Block": return "#7a7a7a";
-                                default: return "#64748BFF";
+                                case "Lecture": return "#b0e8ff";           // Light blue
+                                case "Lab": return "#abffc6";               // Light green
+                                case "Tutorial": return "#edc8ff";          // Light purple
+                                case "Block": return "#7a7a7a";             // Gray
+                                case "Departmental": return "#ffd6a5";  // Light orange
+                                case "Reinforcement": return "#ffaaa5";     // Light red
+                                case "Guidance": return "#a5d6ff";          // Light sky blue
+                                case "Colloquium": return "#8b64ff"; //  purple
+                                case "Registration": return "#ffa5d4";      // Light pink
+                                case "Thesis": return "#a5ffd4";            // Light mint
+                                case "Project": return "#d4ffa5";           // Light lime
+                                default: return "#ff0000";                  // red
                             }
                         }
 

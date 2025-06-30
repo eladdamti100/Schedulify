@@ -20,14 +20,15 @@
 #include <QQuickWindow>
 #include <QTimer>
 
-// Struct to represent a block time
+// Time block for blocking schedule slots
 struct BlockTime {
     QString day;
     QString startTime;
     QString endTime;
+    QString semester; // semester assignment
 
-    BlockTime(const QString& d, const QString& st, const QString& et)
-            : day(d), startTime(st), endTime(et) {}
+    BlockTime(const QString& d, const QString& st, const QString& et, const QString& sem = "A")
+            : day(d), startTime(st), endTime(et), semester(sem) {} // default to semester A
 };
 
 class CourseSelectionController final : public ControllerManager {
@@ -54,29 +55,45 @@ public:
     void initiateCoursesData(const vector<Course>& courses);
 
     Q_INVOKABLE bool isCourseSelected(int index);
+    Q_INVOKABLE void addBlockTimeToSemester(const QString& day, const QString& startTime,
+                                            const QString& endTime, const QString& semester);
     Q_INVOKABLE void toggleCourseSelection(int index);
     Q_INVOKABLE void filterCourses(const QString &text);
     Q_INVOKABLE void resetFilter();
     Q_INVOKABLE void generateSchedules();
     Q_INVOKABLE void deselectCourse(int index);
     Q_INVOKABLE void createNewCourse(const QString& courseName, const QString& courseId,
-                                     const QString& teacherName, const QVariantList& sessionGroups);
+                                     const QString& teacherName, int semester, const QVariantList& sessionGroups);
+
+    // Semester filtering functionality
+    Q_INVOKABLE void filterBySemester(const QString& semester);
+
+    // Semester-specific utilities
+    Q_INVOKABLE QString getCourseSemester(int courseIndex);
+    Q_INVOKABLE bool canAddCourseToSemester(int courseIndex);
 
     Q_INVOKABLE void addBlockTime(const QString& day, const QString& startTime, const QString& endTime);
     Q_INVOKABLE void removeBlockTime(int index);
     Q_INVOKABLE void clearAllBlockTimes();
 
     Q_INVOKABLE void setupValidationTimeout(int timeoutMs);
+    Q_INVOKABLE int getSelectedCoursesCountForSemester(const QString& semester);
+    Q_INVOKABLE QVariantList getSelectedCoursesForSemester(const QString& semester);
 
 private slots:
-    void onSchedulesGenerated(vector<InformativeSchedule>* schedules);
     void onValidationTimeout();
+
+    // Handle semester schedule generation completion
+    void onSemesterSchedulesGenerated(const QString& semester, vector<InformativeSchedule>* schedules);
 
 signals:
     void selectionChanged();
     void blockTimesChanged();
     void errorMessage(const QString &message);
     void validationStateChanged();
+
+    // Emitted when semester schedules are ready
+    void semesterSchedulesGenerated(const QString& semester, vector<InformativeSchedule>* schedules);
 
 private:
     CourseModel* m_courseModel;
@@ -87,18 +104,36 @@ private:
     bool validationCompleted = false;
     bool m_validationInProgress = false;
     QStringList m_validationErrors;
+    bool hasNavigatedToSchedules = false;
+
     vector<Course> allCourses;
-    vector<Course> selectedCourses;
     vector<Course> filteredCourses;
     vector<Course> blockTimes;
     vector<BlockTime> userBlockTimes;
 
-    vector<int> selectedIndices;
+    // Per-semester course selections
+    vector<Course> selectedCoursesA;
+    vector<Course> selectedCoursesB;
+    vector<Course> selectedCoursesSummer;
+
+    vector<int> selectedIndicesA;
+    vector<int> selectedIndicesB;
+    vector<int> selectedIndicesSummer;
+
     vector<int> filteredIndicesMap;
     QString currentSearchText;
+
+    // Semester filtering state: "ALL", "A", "B", "SUMMER"
+    QString currentSemesterFilter = "ALL";
+
     IModel* modelConnection;
     QThread* validatorThread = nullptr;
     QThread* workerThread = nullptr;
+
+    // Semester-specific helper methods
+    void updateSelectedCoursesModel();
+    void generateSemesterSchedules(const QString& semester);
+    void checkAndNavigateToSchedules();
 
     void updateBlockTimesModel();
     Course createSingleBlockTimeCourse();
@@ -111,6 +146,15 @@ private:
     void cleanupValidatorThread();
     void setValidationInProgress(bool inProgress);
     void setValidationErrors(const QStringList& errors);
+
+    // Helper methods for semester filtering
+    void applyFilters();
+    bool matchesSemesterFilter(const Course& course) const;
+    bool matchesSearchFilter(const Course& course, const QString& searchText) const;
+
+    // Per-semester block time handling
+    vector<BlockTime> getBlockTimesForCurrentSemester(const QString& semester);
+    Course createSingleBlockTimeCourseForSemester(const vector<BlockTime>& semesterBlockTimes, const QString& semester);
 
     inline static const int VALIDATION_TIMEOUT_MS = 60000;
     inline static const int THREAD_CLEANUP_TIMEOUT_MS = 10000;

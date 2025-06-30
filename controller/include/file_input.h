@@ -7,7 +7,6 @@
 #include "course_selection.h"
 #include "file_model.h"
 #include "logger.h"
-
 #include <QFileDialog>
 #include <QStandardPaths>
 #include <algorithm>

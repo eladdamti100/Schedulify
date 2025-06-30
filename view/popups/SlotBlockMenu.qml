@@ -6,7 +6,8 @@ import QtQuick.Controls.Basic
 Popup {
     id: root
 
-    signal blockTimeAdded(string day, string startTime, string endTime)
+    // Modified signal to include semester
+    signal blockTimeAdded(string day, string startTime, string endTime, string semester)
 
     // Properties
     property int startHour: 8
@@ -14,8 +15,11 @@ Popup {
     property string errorMessage: ""
     property bool entireDay: false
 
+    // Semester selection property
+    property string selectedSemester: "A" // Default to Semester A
+
     width: 400
-    height: 400
+    height: 480  // Increased height for semester selection
     modal: true
     focus: true
     clip: true
@@ -83,12 +87,14 @@ Popup {
         var startTime = getFormattedTime(startHour);
         var endTime = getFormattedTime(endHour);
 
-        root.blockTimeAdded(day, startTime, endTime);
+        // Include semester in the signal
+        root.blockTimeAdded(day, startTime, endTime, selectedSemester);
 
         daySelector.currentIndex = 0;
         startHour = 8;
         endHour = 9;
         entireDay = false;
+        selectedSemester = "A"; // Reset to default
         errorMessage = "";
 
         root.close();
@@ -194,7 +200,7 @@ Popup {
                 left: parent.left
                 right: parent.right
             }
-            height: 75
+            height: 70
 
             Label {
                 id: dayLabel
@@ -204,14 +210,14 @@ Popup {
                     right: parent.right
                 }
                 height: 22
-                text: "Day"
+                text: "Day of Week"
                 font.pixelSize: 14
                 font.bold: true
                 color: "#374151"
             }
 
             Rectangle {
-                id: dayContainer
+                id: dayComboRect
                 anchors {
                     top: dayLabel.bottom
                     topMargin: 8
@@ -228,6 +234,7 @@ Popup {
                     id: daySelector
                     anchors.fill: parent
                     model: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                    currentIndex: 0
 
                     background: Rectangle {
                         color: "transparent"
@@ -235,71 +242,12 @@ Popup {
                     }
 
                     contentItem: Text {
+                        leftPadding: 12
+                        rightPadding: daySelector.indicator.width + daySelector.spacing
                         text: daySelector.displayText
                         font.pixelSize: 14
-                        color: "#1f2937"
-                        horizontalAlignment: Text.AlignLeft
+                        color: "#374151"
                         verticalAlignment: Text.AlignVCenter
-                        leftPadding: 12
-                        rightPadding: 30
-                    }
-
-                    popup: Popup {
-                        y: daySelector.height
-                        width: daySelector.width
-                        height: contentItem.implicitHeight
-                        padding: 1
-
-                        background: Rectangle {
-                            color: "#415263"
-                            border.width: 1
-                            border.color: "#d1d5db"
-                            radius: 6
-                        }
-
-                        contentItem: ListView {
-                            clip: true
-                            implicitHeight: contentHeight
-                            model: daySelector.delegateModel
-                            currentIndex: daySelector.highlightedIndex
-
-                            delegate: ItemDelegate {
-                                width: daySelector.width
-                                height: 40
-                                hoverEnabled: true
-
-                                background: Rectangle {
-                                    color: {
-                                        if (parent.pressed) return "#e5e7eb"
-                                        if (parent.hovered) return "#f3f4f6"
-                                        return "#ffffff"
-                                    }
-                                    radius: 4
-                                    border.width: parent.activeFocus ? 1 : 0
-                                    border.color: "#3b82f6"
-                                }
-
-                                contentItem: Text {
-                                    text: modelData
-                                    font.pixelSize: 14
-                                    color: "#1f2937"
-                                    font.weight: Font.Normal
-                                    horizontalAlignment: Text.AlignLeft
-                                    verticalAlignment: Text.AlignVCenter
-                                    leftPadding: 12
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        daySelector.currentIndex = index
-                                        daySelector.popup.close()
-                                    }
-                                    cursorShape: Qt.PointingHandCursor
-                                }
-                            }
-                        }
                     }
 
                     indicator: Text {
@@ -313,11 +261,167 @@ Popup {
             }
         }
 
+        // Semester selection
+        Item {
+            id: semesterSelectionSection
+            anchors {
+                top: daySelectionSection.bottom
+                topMargin: 20
+                left: parent.left
+                right: parent.right
+            }
+            height: 70
+
+            Label {
+                id: semesterLabel
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                }
+                height: 22
+                text: "Semester"
+                font.pixelSize: 14
+                font.bold: true
+                color: "#374151"
+            }
+
+            Rectangle {
+                id: semesterContainer
+                anchors {
+                    top: semesterLabel.bottom
+                    topMargin: 8
+                    left: parent.left
+                    right: parent.right
+                    bottom: parent.bottom
+                }
+                color: "#f9fafb"
+                radius: 6
+                border.width: 1
+                border.color: "#d1d5db"
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 15
+
+                    ButtonGroup { id: semesterGroup }
+
+                    // Semester A
+                    Rectangle {
+                        width: 80
+                        height: 32
+                        radius: 5
+                        color: selectedSemester === "A" ? "#3b82f6" : "#ffffff"
+                        border.width: 2
+                        border.color: selectedSemester === "A" ? "#3b82f6" : "#d1d5db"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Semester A"
+                            font.pixelSize: 12
+                            font.bold: selectedSemester === "A"
+                            color: selectedSemester === "A" ? "#ffffff" : "#374151"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: selectedSemester = "A"
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        // Hover effect
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 5
+                            color: "#3b82f6"
+                            opacity: selectedSemester !== "A" && parent.children[1].containsMouse ? 0.1 : 0
+                            Behavior on opacity {
+                                NumberAnimation { duration: 150 }
+                            }
+                        }
+                    }
+
+                    // Semester B
+                    Rectangle {
+                        width: 80
+                        height: 32
+                        radius: 5
+                        color: selectedSemester === "B" ? "#3b82f6" : "#ffffff"
+                        border.width: 2
+                        border.color: selectedSemester === "B" ? "#3b82f6" : "#d1d5db"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Semester B"
+                            font.pixelSize: 12
+                            font.bold: selectedSemester === "B"
+                            color: selectedSemester === "B" ? "#ffffff" : "#374151"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: selectedSemester = "B"
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        // Hover effect
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 5
+                            color: "#3b82f6"
+                            opacity: selectedSemester !== "B" && parent.children[1].containsMouse ? 0.1 : 0
+                            Behavior on opacity {
+                                NumberAnimation { duration: 150 }
+                            }
+                        }
+                    }
+
+                    // Summer
+                    Rectangle {
+                        width: 70
+                        height: 32
+                        radius: 5
+                        color: selectedSemester === "SUMMER" ? "#3b82f6" : "#ffffff"
+                        border.width: 2
+                        border.color: selectedSemester === "SUMMER" ? "#3b82f6" : "#d1d5db"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Summer"
+                            font.pixelSize: 12
+                            font.bold: selectedSemester === "SUMMER"
+                            color: selectedSemester === "SUMMER" ? "#ffffff" : "#374151"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: selectedSemester = "SUMMER"
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        // Hover effect
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 5
+                            color: "#3b82f6"
+                            opacity: selectedSemester !== "SUMMER" && parent.children[1].containsMouse ? 0.1 : 0
+                            Behavior on opacity {
+                                NumberAnimation { duration: 150 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Time selection section
         Item {
             id: timeSelectionSection
             anchors {
-                top: daySelectionSection.bottom
+                top: semesterSelectionSection.bottom // Changed from daySelectionSection.bottom
                 topMargin: 20
                 left: parent.left
                 right: parent.right
@@ -385,108 +489,96 @@ Popup {
                         radius: 6
                         border.width: 1
                         border.color: "#d1d5db"
-                        opacity: entireDay ? 0.6 : 1.0
+                        opacity: entireDay ? 0.5 : 1.0
+
+                        Text {
+                            id: startTimeDisplay
+                            anchors.centerIn: parent
+                            text: getFormattedTime(startHour)
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: entireDay ? "#9ca3af" : "#374151"
+                        }
 
                         Item {
-                            id: startTimeContent
-                            anchors.centerIn: parent
-                            width: 80
-                            height: parent.height
+                            id: startTimeControls
+                            anchors {
+                                right: parent.right
+                                rightMargin: 8
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 20
+                            height: parent.height - 8
 
-                            // Hour display
-                            Text {
-                                id: startHourDisplay
+                            Rectangle {
+                                id: startUpButton
                                 anchors {
+                                    top: parent.top
                                     left: parent.left
-                                    verticalCenter: parent.verticalCenter
+                                    right: parent.right
                                 }
-                                width: 50
-                                text: String(startHour).padStart(2, '0') + ":00"
-                                font.pixelSize: 16
-                                color: entireDay ? "#9ca3af" : "#1f2937"
-                                horizontalAlignment: Text.AlignHCenter
+                                height: 18
+                                color: (!entireDay && upStartHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
+                                radius: 3
+                                border.width: 1
+                                border.color: "#d1d5db"
+                                opacity: entireDay ? 0.5 : 1.0
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▲"
+                                    font.pixelSize: 10
+                                    color: entireDay ? "#9ca3af" : "#374151"
+                                }
+
+                                MouseArea {
+                                    id: upStartHourMouseArea
+                                    anchors.fill: parent
+                                    hoverEnabled: !entireDay
+                                    enabled: !entireDay
+                                    onClicked: {
+                                        if (startHour < 23) {
+                                            startHour = startHour + 1;
+                                            validateTimes();
+                                        }
+                                    }
+                                    cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                }
                             }
 
-                            // Hour controls
-                            Item {
-                                id: startHourControls
+                            Rectangle {
+                                id: startDownButton
                                 anchors {
+                                    bottom: parent.bottom
+                                    left: parent.left
                                     right: parent.right
-                                    verticalCenter: parent.verticalCenter
                                 }
-                                width: 25
-                                height: 38
+                                height: 18
+                                color: (!entireDay && downStartHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
+                                radius: 3
+                                border.width: 1
+                                border.color: "#d1d5db"
+                                opacity: entireDay ? 0.5 : 1.0
 
-                                Rectangle {
-                                    id: startUpButton
-                                    anchors {
-                                        top: parent.top
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-                                    height: 18
-                                    color: (!entireDay && upStartHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
-                                    radius: 3
-                                    border.width: 1
-                                    border.color: "#d1d5db"
-                                    opacity: entireDay ? 0.5 : 1.0
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▲"
-                                        font.pixelSize: 10
-                                        color: entireDay ? "#9ca3af" : "#374151"
-                                    }
-
-                                    MouseArea {
-                                        id: upStartHourMouseArea
-                                        anchors.fill: parent
-                                        hoverEnabled: !entireDay
-                                        enabled: !entireDay
-                                        onClicked: {
-                                            if (startHour < 23) {
-                                                startHour = startHour + 1;
-                                                validateTimes();
-                                            }
-                                        }
-                                        cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
-                                    }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▼"
+                                    font.pixelSize: 10
+                                    color: entireDay ? "#9ca3af" : "#374151"
                                 }
 
-                                Rectangle {
-                                    id: startDownButton
-                                    anchors {
-                                        bottom: parent.bottom
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-                                    height: 18
-                                    color: (!entireDay && downStartHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
-                                    radius: 3
-                                    border.width: 1
-                                    border.color: "#d1d5db"
-                                    opacity: entireDay ? 0.5 : 1.0
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▼"
-                                        font.pixelSize: 10
-                                        color: entireDay ? "#9ca3af" : "#374151"
-                                    }
-
-                                    MouseArea {
-                                        id: downStartHourMouseArea
-                                        anchors.fill: parent
-                                        hoverEnabled: !entireDay
-                                        enabled: !entireDay
-                                        onClicked: {
-                                            if (startHour > 0) {
-                                                startHour = startHour - 1;
-                                                validateTimes();
-                                            }
+                                MouseArea {
+                                    id: downStartHourMouseArea
+                                    anchors.fill: parent
+                                    hoverEnabled: !entireDay
+                                    enabled: !entireDay
+                                    onClicked: {
+                                        if (startHour > 0) {
+                                            startHour = startHour - 1;
+                                            validateTimes();
                                         }
-                                        cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
                                     }
+                                    cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
                                 }
                             }
                         }
@@ -529,107 +621,95 @@ Popup {
                         radius: 6
                         border.width: 1
                         border.color: "#d1d5db"
-                        opacity: entireDay ? 0.6 : 1.0
+                        opacity: entireDay ? 0.5 : 1.0
+
+                        Text {
+                            id: endTimeDisplay
+                            anchors.centerIn: parent
+                            text: getFormattedTime(endHour)
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: entireDay ? "#9ca3af" : "#374151"
+                        }
 
                         Item {
-                            id: endTimeContent
-                            anchors.centerIn: parent
-                            width: 80
-                            height: parent.height
+                            id: endTimeControls
+                            anchors {
+                                right: parent.right
+                                rightMargin: 8
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 20
+                            height: parent.height - 8
 
-                            // Hour display
-                            Text {
-                                id: endHourDisplay
+                            Rectangle {
+                                id: endUpButton
                                 anchors {
+                                    top: parent.top
                                     left: parent.left
-                                    verticalCenter: parent.verticalCenter
+                                    right: parent.right
                                 }
-                                width: 50
-                                text: String(endHour).padStart(2, '0') + ":00"
-                                font.pixelSize: 16
-                                color: entireDay ? "#9ca3af" : "#1f2937"
-                                horizontalAlignment: Text.AlignHCenter
+                                height: 18
+                                color: (!entireDay && upEndHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
+                                radius: 3
+                                border.width: 1
+                                border.color: "#d1d5db"
+                                opacity: entireDay ? 0.5 : 1.0
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▲"
+                                    font.pixelSize: 10
+                                    color: entireDay ? "#9ca3af" : "#374151"
+                                }
+
+                                MouseArea {
+                                    id: upEndHourMouseArea
+                                    anchors.fill: parent
+                                    hoverEnabled: !entireDay
+                                    enabled: !entireDay
+                                    onClicked: {
+                                        if (endHour < 23) {
+                                            endHour = endHour + 1;
+                                        }
+                                    }
+                                    cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                }
                             }
 
-                            // Hour controls
-                            Item {
-                                id: endHourControls
+                            Rectangle {
+                                id: endDownButton
                                 anchors {
+                                    bottom: parent.bottom
+                                    left: parent.left
                                     right: parent.right
-                                    verticalCenter: parent.verticalCenter
                                 }
-                                width: 25
-                                height: 38
+                                height: 18
+                                color: (!entireDay && downEndHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
+                                radius: 3
+                                border.width: 1
+                                border.color: "#d1d5db"
+                                opacity: entireDay ? 0.5 : 1.0
 
-                                Rectangle {
-                                    id: endUpButton
-                                    anchors {
-                                        top: parent.top
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-                                    height: 18
-                                    color: (!entireDay && upEndHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
-                                    radius: 3
-                                    border.width: 1
-                                    border.color: "#d1d5db"
-                                    opacity: entireDay ? 0.5 : 1.0
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▲"
-                                        font.pixelSize: 10
-                                        color: entireDay ? "#9ca3af" : "#374151"
-                                    }
-
-                                    MouseArea {
-                                        id: upEndHourMouseArea
-                                        anchors.fill: parent
-                                        hoverEnabled: !entireDay
-                                        enabled: !entireDay
-                                        onClicked: {
-                                            if (endHour < 23) {
-                                                endHour = endHour + 1;
-                                            }
-                                        }
-                                        cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
-                                    }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▼"
+                                    font.pixelSize: 10
+                                    color: entireDay ? "#9ca3af" : "#374151"
                                 }
 
-                                Rectangle {
-                                    id: endDownButton
-                                    anchors {
-                                        bottom: parent.bottom
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-                                    height: 18
-                                    color: (!entireDay && downEndHourMouseArea.containsMouse) ? "#e5e7eb" : "#f3f4f6"
-                                    radius: 3
-                                    border.width: 1
-                                    border.color: "#d1d5db"
-                                    opacity: entireDay ? 0.5 : 1.0
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "▼"
-                                        font.pixelSize: 10
-                                        color: entireDay ? "#9ca3af" : "#374151"
-                                    }
-
-                                    MouseArea {
-                                        id: downEndHourMouseArea
-                                        anchors.fill: parent
-                                        hoverEnabled: !entireDay
-                                        enabled: !entireDay
-                                        onClicked: {
-                                            if (endHour > 1) {
-                                                endHour = endHour - 1;
-                                                validateTimes();
-                                            }
+                                MouseArea {
+                                    id: downEndHourMouseArea
+                                    anchors.fill: parent
+                                    hoverEnabled: !entireDay
+                                    enabled: !entireDay
+                                    onClicked: {
+                                        if (endHour > 0) {
+                                            endHour = endHour - 1;
+                                            validateTimes();
                                         }
-                                        cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
                                     }
+                                    cursorShape: entireDay ? Qt.ArrowCursor : Qt.PointingHandCursor
                                 }
                             }
                         }
@@ -779,12 +859,12 @@ Popup {
                 width: (parent.width - 12) / 2
 
                 background: Rectangle {
-                    color: addMouseArea.containsMouse ? "#1d4ed8" : "#2563eb"
+                    color: addMouseArea.containsMouse ? "#2563eb" : "#3b82f6"
                     radius: 6
                 }
 
                 contentItem: Text {
-                    text: "Add Block Time"
+                    text: "Add"
                     font.pixelSize: 14
                     font.bold: true
                     color: "#ffffff"

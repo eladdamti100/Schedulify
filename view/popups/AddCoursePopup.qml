@@ -16,17 +16,19 @@ Popup {
     property alias courseName: courseNameField.text
     property alias courseId: courseIdField.text
     property alias teacherName: teacherField.text
+    property alias selectedSemester: semesterCombo.currentIndex
 
     // Error handling properties
     property string errorMessage: ""
 
-    signal courseCreated(string courseName, string courseId, string teacherName, var sessionGroups)
+    signal courseCreated(string courseName, string courseId, string teacherName, int semester, var sessionGroups)
 
     // Clear all data
     function resetPopup() {
         courseNameField.text = ""
         courseIdField.text = ""
         teacherField.text = ""
+        semesterCombo.currentIndex = 0
         errorMessage = ""
         groupsModel.clear()
         groupsModel.append({
@@ -50,26 +52,13 @@ Popup {
         }
     }
 
-    function getFormattedTime(hour) {
-        return String(hour).padStart(2, '0') + ":00";
-    }
-
-    function validateTimes() {
-        if (endHour <= startHour) {
-            endHour = startHour + 1;
-            if (endHour > 23) {
-                endHour = 23;
-                startHour = 22;
-            }
-        }
-    }
-
     background: Rectangle {
         color: "#ffffff"
         border.color: "#e5e7eb"
         border.width: 2
         radius: 16
 
+        // Drop shadow effects
         Rectangle {
             anchors.fill: parent
             anchors.margins: -4
@@ -91,18 +80,20 @@ Popup {
         }
     }
 
-    // Main content section
-    Column {
+    // FIXED: Use proper anchoring instead of overlapping Column
+    Item {
         anchors.fill: parent
         anchors.margins: 24
-        anchors.bottomMargin: 90
-        spacing: 20
 
         // Header
-        Rectangle {
-            width: parent.width
+        Item {
+            id: headerSection
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+            }
             height: 60
-            color: "transparent"
 
             Text {
                 anchors {
@@ -153,7 +144,13 @@ Popup {
 
         // Error message
         Rectangle {
-            width: parent.width
+            id: errorSection
+            anchors {
+                top: headerSection.bottom
+                topMargin: 20
+                left: parent.left
+                right: parent.right
+            }
             height: errorMessage === "" ? 0 : 50
             visible: errorMessage !== ""
             color: "#fef2f2"
@@ -172,8 +169,14 @@ Popup {
 
         // Course Information Section
         Rectangle {
-            width: parent.width
-            height: 230
+            id: courseInfoSection
+            anchors {
+                top: errorSection.bottom
+                topMargin: errorMessage === "" ? 0 : 20
+                left: parent.left
+                right: parent.right
+            }
+            height: 280 // Fixed height
             color: "#f8fafc"
             radius: 12
             border.width: 1
@@ -234,9 +237,107 @@ Popup {
                         }
                     }
 
+                    // Semester Selection
+                    Column {
+                        Layout.preferredWidth: 150
+                        spacing: 8
+
+                        Text {
+                            text: "Semester *"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: "#374151"
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 44
+                            color: "#ffffff"
+                            radius: 8
+                            border.width: 2
+                            border.color: "#e5e7eb"
+
+                            ComboBox {
+                                id: semesterCombo
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                model: [
+                                    { text: "Semester A", value: 1, color: "#3b82f6" },
+                                    { text: "Semester B", value: 2, color: "#22c55e" },
+                                    { text: "Summer", value: 3, color: "#f59e0b" }
+                                ]
+                                textRole: "text"
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                    radius: 6
+                                }
+
+                                contentItem: Rectangle {
+                                    color: "transparent"
+
+                                    Row {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 8
+
+                                        Rectangle {
+                                            width: 12
+                                            height: 12
+                                            radius: 6
+                                            color: semesterCombo.model[semesterCombo.currentIndex].color
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: semesterCombo.model[semesterCombo.currentIndex].text
+                                            font.pixelSize: 14
+                                            color: "#1f2937"
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+
+                                delegate: ItemDelegate {
+                                    width: semesterCombo.width
+                                    height: 40
+
+                                    background: Rectangle {
+                                        color: parent.hovered ? "#f3f4f6" : "#ffffff"
+                                        radius: 4
+                                    }
+
+                                    contentItem: Row {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 8
+
+                                        Rectangle {
+                                            width: 12
+                                            height: 12
+                                            radius: 6
+                                            color: modelData.color
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: modelData.text
+                                            font.pixelSize: 14
+                                            color: "#1f2937"
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Course Name
                     Column {
                         Layout.fillWidth: true
+                        Layout.columnSpan: 2
                         spacing: 8
 
                         Text {
@@ -294,7 +395,7 @@ Popup {
                             TextField {
                                 id: teacherField
                                 anchors.fill: parent
-                                placeholderText: "e.g., Prof. prof"
+                                placeholderText: "e.g., Prof. Smith"
                                 placeholderTextColor: "#9CA3AF"
                                 background: Rectangle { color: "transparent" }
                                 color: "#1f2937"
@@ -310,11 +411,16 @@ Popup {
             }
         }
 
-        // Session Groups Section Header
-        Rectangle {
-            width: parent.width
-            height: 20
-            color: "transparent"
+        // Session Groups Header
+        Item {
+            id: sessionGroupsHeader
+            anchors {
+                top: courseInfoSection.bottom
+                topMargin: 30
+                left: parent.left
+                right: parent.right
+            }
+            height: 50
 
             Text {
                 anchors {
@@ -340,7 +446,6 @@ Popup {
                     radius: 8
                     border.width: 0
 
-                    // Subtle gradient effect
                     Rectangle {
                         anchors.fill: parent
                         color: "transparent"
@@ -384,11 +489,17 @@ Popup {
             }
         }
 
-        // Scrollable Groups List Section
+        // FIXED: Session Groups ScrollView with proper anchoring
         ScrollView {
             id: groupsScrollView
-            width: parent.width
-            height: parent.height - 350
+            anchors {
+                top: sessionGroupsHeader.bottom
+                topMargin: 20
+                left: parent.left
+                right: parent.right
+                bottom: actionButtonsSection.top
+                bottomMargin: 20
+            }
             clip: true
             contentWidth: availableWidth
 
@@ -954,247 +1065,251 @@ Popup {
                 }
             }
         }
-    }
 
-    // Action Buttons
-    Rectangle {
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 24
-        anchors.rightMargin: 24
-        height: 60
-        color: "transparent"
-
-        RowLayout {
-            anchors.fill: parent
-            spacing: 16
-
-            Button {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
-
-                background: Rectangle {
-                    color: cancelMouseArea.containsMouse ? "#f1f5f9" : "#ffffff"
-                    radius: 12
-                    border.width: 2
-                    border.color: "#e2e8f0"
-                }
-
-                contentItem: Text {
-                    text: "Cancel"
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: "#64748b"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                MouseArea {
-                    id: cancelMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        resetPopup()
-                        addCoursePopup.close()
-                    }
-                    cursorShape: Qt.PointingHandCursor
-                }
+        // FIXED: Action Buttons with proper anchoring
+        Item {
+            id: actionButtonsSection
+            anchors {
+                bottom: parent.bottom
+                left: parent.left
+                right: parent.right
             }
+            height: 60
 
-            Button {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
+            RowLayout {
+                anchors.fill: parent
+                spacing: 16
 
-                background: Rectangle {
-                    color: saveMouseArea.containsMouse ? "#3b82f6" : "#4f46e5"
-                    radius: 12
-                    border.width: 0
+                Button {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
 
-                    // Gradient effect
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "transparent"
+                    background: Rectangle {
+                        color: cancelMouseArea.containsMouse ? "#f1f5f9" : "#ffffff"
                         radius: 12
-                        border.width: 1
-                        border.color: "#ffffff30"
+                        border.width: 2
+                        border.color: "#e2e8f0"
+                    }
+
+                    contentItem: Text {
+                        text: "Cancel"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: "#64748b"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    MouseArea {
+                        id: cancelMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            resetPopup()
+                            addCoursePopup.close()
+                        }
+                        cursorShape: Qt.PointingHandCursor
                     }
                 }
 
-                contentItem: Text {
-                    text: "Save Course"
-                    font.pixelSize: 16
-                    font.bold: true
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                Button {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
 
-                MouseArea {
-                    id: saveMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        // Validate required fields
-                        if (courseNameField.text.trim() === "") {
-                            showError("Course name is required")
-                            return;
+                    background: Rectangle {
+                        color: saveMouseArea.containsMouse ? "#3b82f6" : "#4f46e5"
+                        radius: 12
+                        border.width: 0
+
+                        // Gradient effect
+                        Rectangle {
+                            anchors.fill: parent
+                            color: "transparent"
+                            radius: 12
+                            border.width: 1
+                            border.color: "#ffffff30"
                         }
+                    }
 
-                        if (courseIdField.text.trim() === "") {
-                            showError("Course ID is required")
-                            return;
-                        }
+                    contentItem: Text {
+                        text: "Save Course"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
 
-                        if (teacherField.text.trim() === "") {
-                            showError("Teacher name is required")
-                            return;
-                        }
-
-                        // Validate that course ID is a number
-                        if (isNaN(parseInt(courseIdField.text))) {
-                            showError("Course ID must be a valid number")
-                            return;
-                        }
-
-                        // Validate that course ID is exactly 5 digits
-                        if (courseIdField.text.length !== 5) {
-                            showError("Course ID must be exactly 5 digits")
-                            return;
-                        }
-
-                        // Collect session groups data and validate building/room fields
-                        var sessionGroups = [];
-                        var hasLecture = false;
-
-                        // Iterate through all groups in the repeater
-                        for (var groupIndex = 0; groupIndex < groupsModel.count; groupIndex++) {
-                            var groupItem = groupsModel.get(groupIndex);
-
-                            // Check if this group is a lecture
-                            if (groupItem.groupType === "Lecture") {
-                                hasLecture = true;
+                    MouseArea {
+                        id: saveMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            // Validate required fields
+                            if (courseNameField.text.trim() === "") {
+                                showError("Course name is required")
+                                return;
                             }
 
-                            // Get the corresponding group delegate
-                            var groupDelegate = groupsRepeater.itemAt(groupIndex);
-                            if (!groupDelegate) {
-                                continue;
+                            if (courseIdField.text.trim() === "") {
+                                showError("Course ID is required")
+                                return;
                             }
 
-                            // Find the ComboBox to get the actual selected type
-                            var actualGroupType = groupItem.groupType; // Default fallback
-                            function findComboBox(parent) {
-                                for (var i = 0; i < parent.children.length; i++) {
-                                    var child = parent.children[i];
-                                    if (child.toString().indexOf("ComboBox") > -1 && child.currentText) {
-                                        return child.currentText;
-                                    }
-                                    if (child.children && child.children.length > 0) {
-                                        var found = findComboBox(child);
-                                        if (found) return found;
-                                    }
-                                }
-                                return null;
+                            if (teacherField.text.trim() === "") {
+                                showError("Teacher name is required")
+                                return;
                             }
 
-                            var comboBoxType = findComboBox(groupDelegate);
-                            if (comboBoxType) {
-                                actualGroupType = comboBoxType;
-                                // Update hasLecture check with actual type
-                                if (actualGroupType === "Lecture") {
+                            // Validate that course ID is a number
+                            if (isNaN(parseInt(courseIdField.text))) {
+                                showError("Course ID must be a valid number")
+                                return;
+                            }
+
+                            // Validate that course ID is exactly 5 digits
+                            if (courseIdField.text.length !== 5) {
+                                showError("Course ID must be exactly 5 digits")
+                                return;
+                            }
+
+                            // Get selected semester value
+                            var selectedSemesterValue = semesterCombo.model[semesterCombo.currentIndex].value;
+
+                            // Collect session groups data and validate building/room fields
+                            var sessionGroups = [];
+                            var hasLecture = false;
+
+                            // Iterate through all groups in the repeater
+                            for (var groupIndex = 0; groupIndex < groupsModel.count; groupIndex++) {
+                                var groupItem = groupsModel.get(groupIndex);
+
+                                // Check if this group is a lecture
+                                if (groupItem.groupType === "Lecture") {
                                     hasLecture = true;
                                 }
-                            }
 
-                            // Access the sessionsModel through the delegate's children
-                            var sessionsRepeater = null;
+                                // Get the corresponding group delegate
+                                var groupDelegate = groupsRepeater.itemAt(groupIndex);
+                                if (!groupDelegate) {
+                                    continue;
+                                }
 
-                            // Look for the sessions repeater in the group delegate
-                            function findSessionsRepeater(parent) {
-                                for (var i = 0; i < parent.children.length; i++) {
-                                    var child = parent.children[i];
-                                    if (child.toString().indexOf("Repeater") > -1 && child.model) {
-                                        // Check if this repeater has session data
-                                        if (child.model.count !== undefined) {
-                                            return child;
+                                // Find the ComboBox to get the actual selected type
+                                var actualGroupType = groupItem.groupType; // Default fallback
+                                function findComboBox(parent) {
+                                    for (var i = 0; i < parent.children.length; i++) {
+                                        var child = parent.children[i];
+                                        if (child.toString().indexOf("ComboBox") > -1 && child.currentText) {
+                                            return child.currentText;
+                                        }
+                                        if (child.children && child.children.length > 0) {
+                                            var found = findComboBox(child);
+                                            if (found) return found;
                                         }
                                     }
-                                    if (child.children && child.children.length > 0) {
-                                        var found = findSessionsRepeater(child);
-                                        if (found) return found;
+                                    return null;
+                                }
+
+                                var comboBoxType = findComboBox(groupDelegate);
+                                if (comboBoxType) {
+                                    actualGroupType = comboBoxType;
+                                    // Update hasLecture check with actual type
+                                    if (actualGroupType === "Lecture") {
+                                        hasLecture = true;
                                     }
                                 }
-                                return null;
-                            }
 
-                            sessionsRepeater = findSessionsRepeater(groupDelegate);
+                                // Access the sessionsModel through the delegate's children
+                                var sessionsRepeater = null;
 
-                            if (!sessionsRepeater || !sessionsRepeater.model) {
-                                continue;
-                            }
-
-                            var sessionsModel = sessionsRepeater.model;
-
-                            // Collect sessions for this group and validate building/room
-                            var groupSessions = [];
-                            for (var sessionIndex = 0; sessionIndex < sessionsModel.count; sessionIndex++) {
-                                var sessionData = sessionsModel.get(sessionIndex);
-
-                                // Validate building and room fields
-                                if (!sessionData.building || sessionData.building.trim() === "") {
-                                    showError("All sessions must have a building specified (Group " + (groupIndex + 1) + ", Session " + (sessionIndex + 1) + ")")
-                                    return;
+                                // Look for the sessions repeater in the group delegate
+                                function findSessionsRepeater(parent) {
+                                    for (var i = 0; i < parent.children.length; i++) {
+                                        var child = parent.children[i];
+                                        if (child.toString().indexOf("Repeater") > -1 && child.model) {
+                                            // Check if this repeater has session data
+                                            if (child.model.count !== undefined) {
+                                                return child;
+                                            }
+                                        }
+                                        if (child.children && child.children.length > 0) {
+                                            var found = findSessionsRepeater(child);
+                                            if (found) return found;
+                                        }
+                                    }
+                                    return null;
                                 }
 
-                                if (!sessionData.room || sessionData.room.trim() === "") {
-                                    showError("All sessions must have a room specified (Group " + (groupIndex + 1) + ", Session " + (sessionIndex + 1) + ")")
-                                    return;
+                                sessionsRepeater = findSessionsRepeater(groupDelegate);
+
+                                if (!sessionsRepeater || !sessionsRepeater.model) {
+                                    continue;
                                 }
 
-                                // Format the session data properly
-                                var session = {
-                                    day: sessionData.day,
-                                    startTime: String(sessionData.startHour).padStart(2, '0') + ":00",
-                                    endTime: String(sessionData.endHour).padStart(2, '0') + ":00",
-                                    building: sessionData.building.trim(),
-                                    room: sessionData.room.trim()
+                                var sessionsModel = sessionsRepeater.model;
+
+                                // Collect sessions for this group and validate building/room
+                                var groupSessions = [];
+                                for (var sessionIndex = 0; sessionIndex < sessionsModel.count; sessionIndex++) {
+                                    var sessionData = sessionsModel.get(sessionIndex);
+
+                                    // Validate building and room fields
+                                    if (!sessionData.building || sessionData.building.trim() === "") {
+                                        showError("All sessions must have a building specified (Group " + (groupIndex + 1) + ", Session " + (sessionIndex + 1) + ")")
+                                        return;
+                                    }
+
+                                    if (!sessionData.room || sessionData.room.trim() === "") {
+                                        showError("All sessions must have a room specified (Group " + (groupIndex + 1) + ", Session " + (sessionIndex + 1) + ")")
+                                        return;
+                                    }
+
+                                    // Format the session data properly
+                                    var session = {
+                                        day: sessionData.day,
+                                        startTime: String(sessionData.startHour).padStart(2, '0') + ":00",
+                                        endTime: String(sessionData.endHour).padStart(2, '0') + ":00",
+                                        building: sessionData.building.trim(),
+                                        room: sessionData.room.trim()
+                                    };
+
+                                    groupSessions.push(session);
+                                }
+
+                                var groupData = {
+                                    type: actualGroupType,
+                                    sessions: groupSessions
                                 };
 
-                                groupSessions.push(session);
+                                sessionGroups.push(groupData);
                             }
 
-                            var groupData = {
-                                type: actualGroupType,
-                                sessions: groupSessions
-                            };
+                            // Validate that course has at least one lecture group
+                            if (!hasLecture) {
+                                showError("A course must have at least one Lecture group")
+                                return;
+                            }
 
-                            sessionGroups.push(groupData);
+                            // Validate that there are session groups
+                            if (sessionGroups.length === 0) {
+                                showError("Please add at least one session group")
+                                return;
+                            }
+
+                            // Emit the signal with semester value
+                            courseCreated(courseNameField.text.trim(),
+                                courseIdField.text.trim(),
+                                teacherField.text.trim(),
+                                selectedSemesterValue,
+                                sessionGroups);
+
+                            // Reset and close
+                            resetPopup()
+                            addCoursePopup.close();
                         }
-
-                        // Validate that course has at least one lecture group
-                        if (!hasLecture) {
-                            showError("A course must have at least one Lecture group")
-                            return;
-                        }
-
-                        // Validate that there are session groups
-                        if (sessionGroups.length === 0) {
-                            showError("Please add at least one session group")
-                            return;
-                        }
-
-                        // Emit the signal
-                        courseCreated(courseNameField.text.trim(),
-                            courseIdField.text.trim(),
-                            teacherField.text.trim(),
-                            sessionGroups);
-
-                        // Reset and close
-                        resetPopup()
-                        addCoursePopup.close();
+                        cursorShape: Qt.PointingHandCursor
                     }
-                    cursorShape: Qt.PointingHandCursor
                 }
             }
         }

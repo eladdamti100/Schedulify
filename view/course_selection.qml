@@ -15,8 +15,99 @@ Page {
 
     property var logWindow: null
 
+    // Semester filter properties
+    property string selectedSemester: "ALL" // "ALL", "A", "B", "SUMMER"
+    property int refreshCounter: 0 // Add this to force updates
+
     function isCourseSelectedSafe(index) {
         return courseSelectionController ? courseSelectionController.isCourseSelected(index) : false;
+    }
+
+    // Function to count selected courses by semester
+    function getSelectedCoursesCountBySemester(semester) {
+        // Use refreshCounter to make this reactive
+        var dummy = refreshCounter;
+
+        if (!courseSelectionController || !courseSelectionController.selectedCoursesModel) {
+            return 0;
+        }
+
+        // Use the controller's method instead of trying to access model directly
+        if (courseSelectionController.getSelectedCoursesCountForSemester) {
+            return courseSelectionController.getSelectedCoursesCountForSemester(semester);
+        }
+
+        // Fallback: count from the total model
+        return courseSelectionController.selectedCoursesModel.rowCount();
+    }
+
+    // Function to get selected courses for a specific semester
+    function getSelectedCoursesForSemester(semester) {
+        // Use refreshCounter to make this reactive
+        var dummy = refreshCounter;
+
+        if (!courseSelectionController || !courseSelectionController.selectedCoursesModel) {
+            return [];
+        }
+
+        // Use controller method if available
+        if (courseSelectionController.getSelectedCoursesForSemester) {
+            return courseSelectionController.getSelectedCoursesForSemester(semester);
+        }
+
+        // Fallback: return all courses
+        var allCourses = [];
+        var model = courseSelectionController.selectedCoursesModel;
+        for (var i = 0; i < model.rowCount(); i++) {
+            allCourses.push({
+                courseId: model.data(model.index(i, 0), Qt.UserRole + 1) || "",
+                courseName: model.data(model.index(i, 0), Qt.UserRole + 2) || "",
+                originalIndex: i
+            });
+        }
+        return allCourses;
+    }
+
+    // Check if we can add a course based on its semester
+    function canAddCourseToSemester(courseIndex) {
+        // Use refreshCounter to make this reactive
+        var dummy = refreshCounter;
+
+        if (!courseSelectionController) {
+            return false;
+        }
+
+        // If course is already selected, we can always deselect it
+        if (isCourseSelectedSafe(courseIndex)) {
+            return true;
+        }
+
+        // Get the course's semester from the controller
+        var courseSemester = "";
+        if (courseSelectionController.getCourseSemester) {
+            courseSemester = courseSelectionController.getCourseSemester(courseIndex);
+        }
+
+        // Check if this semester has reached the limit
+        var semesterCount = getSelectedCoursesCountBySemester(courseSemester);
+        return semesterCount < 7;
+    }
+
+    // Get total selected courses across all semesters (for display only)
+    function getTotalSelectedCoursesCount() {
+        // Use refreshCounter to make this reactive
+        var dummy = refreshCounter;
+
+        if (!courseSelectionController || !courseSelectionController.selectedCoursesModel) {
+            return 0;
+        }
+
+        // Sum up all semesters for display purposes
+        var totalA = getSelectedCoursesCountBySemester("A");
+        var totalB = getSelectedCoursesCountBySemester("B");
+        var totalSummer = getSelectedCoursesCountBySemester("SUMMER");
+
+        return totalA + totalB + totalSummer;
     }
 
     Component.onDestruction: {
@@ -52,6 +143,11 @@ Page {
                 }
             }
         }
+
+        function onSelectionChanged() {
+            // Force refresh of selected courses display
+            refreshCounter++;
+        }
     }
 
     function showErrorMessage(msg) {
@@ -74,8 +170,8 @@ Page {
         id: timeBlockPopup
         parent: Overlay.overlay
 
-        onBlockTimeAdded: function(day, startTime, endTime) {
-            courseSelectionController.addBlockTime(day, startTime, endTime);
+        onBlockTimeAdded: function(day, startTime, endTime, semester) {
+            courseSelectionController.addBlockTimeToSemester(day, startTime, endTime, semester);
         }
     }
 
@@ -83,8 +179,8 @@ Page {
         id: addCoursePopup
         parent: Overlay.overlay
 
-        onCourseCreated: function(courseName, courseId, teacherName, sessionGroups) {
-            courseSelectionController.createNewCourse(courseName, courseId, teacherName, sessionGroups);
+        onCourseCreated: function(courseName, courseId, teacherName, semester, sessionGroups) {
+            courseSelectionController.createNewCourse(courseName, courseId, teacherName, semester, sessionGroups);
         }
     }
 
@@ -267,8 +363,8 @@ Page {
                         rightMargin: 10
                         verticalCenter: parent.verticalCenter
                     }
-                    visible: selectedCoursesRepeater.count > 0
-                    enabled: selectedCoursesRepeater.count > 0
+                    visible: getTotalSelectedCoursesCount() > 0
+                    enabled: getTotalSelectedCoursesCount() > 0
 
                     background: Rectangle {
                         color: generateMouseArea.containsMouse ? "#35455c" : "#1f2937"
@@ -648,6 +744,128 @@ Page {
                             Layout.fillWidth: true
                         }
 
+                        // Semester Toggle
+                        Rectangle {
+                            id: semesterToggle
+                            Layout.preferredWidth: 200
+                            Layout.preferredHeight: 32
+                            radius: 4
+                            border.color: "#e5e7eb"
+                            border.width: 1
+                            color: "#f9fafb"
+
+                            Row {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Rectangle {
+                                    id: allSemesterButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    radius: 4
+                                    color: selectedSemester === "ALL" ? "#3b82f6" : "transparent"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "ALL"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: selectedSemester === "ALL" ? "#ffffff" : "#6b7280"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            selectedSemester = "ALL"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("ALL")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: semesterAButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    color: selectedSemester === "A" ? "#3b82f6" : "transparent"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SEM A"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: selectedSemester === "A" ? "#ffffff" : "#6b7280"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            selectedSemester = "A"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("A")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: semesterBButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    color: selectedSemester === "B" ? "#3b82f6" : "transparent"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SEM B"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: selectedSemester === "B" ? "#ffffff" : "#6b7280"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            selectedSemester = "B"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("B")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    id: summerSemesterButton
+                                    width: parent.width / 4
+                                    height: parent.height
+                                    radius: 4
+                                    color: selectedSemester === "SUMMER" ? "#3b82f6" : "transparent"
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "SUMMER"
+                                        font.pixelSize: 8
+                                        font.bold: true
+                                        color: selectedSemester === "SUMMER" ? "#ffffff" : "#6b7280"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            selectedSemester = "SUMMER"
+                                            if (courseSelectionController) {
+                                                courseSelectionController.filterBySemester("SUMMER")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Button {
                             id: createCourseButton
                             Layout.preferredWidth: 140
@@ -806,7 +1024,7 @@ Page {
                             color: {
                                 if (isCourseSelectedSafe(originalIndex)) {
                                     return "#f0f9ff"
-                                } else if (selectedCoursesRepeater.count >= 7) {
+                                } else if (!canAddCourseToSemester(originalIndex)) {
                                     return "#e5e7eb"
                                 } else {
                                     return "#ffffff"
@@ -816,13 +1034,13 @@ Page {
                             border.color: {
                                 if (isCourseSelectedSafe(originalIndex)) {
                                     return "#3b82f6"
-                                } else if (selectedCoursesRepeater.count >= 7) {
+                                } else if (!canAddCourseToSemester(originalIndex)) {
                                     return "#d1d5db"
                                 } else {
                                     return "#e5e7eb"
                                 }
                             }
-                            opacity: selectedCoursesRepeater.count >= 7 && !courseSelectionController.isCourseSelected(originalIndex) ? 0.7 : 1
+                            opacity: !canAddCourseToSemester(originalIndex) && !courseSelectionController.isCourseSelected(originalIndex) ? 0.7 : 1
 
                             Connections {
                                 target: courseSelectionController
@@ -833,7 +1051,7 @@ Page {
                                         courseDelegate.opacity = 1
                                         courseIdBox.color = "#dbeafe"
                                         courseIdBoxLabel.color = "#2563eb"
-                                    } else if (selectedCoursesRepeater.count >= 7) {
+                                    } else if (!canAddCourseToSemester(originalIndex)) {
                                         courseDelegate.color = "#e5e7eb"
                                         courseDelegate.border.color = "#d1d5db"
                                         courseDelegate.opacity = 0.7
@@ -867,7 +1085,7 @@ Page {
                                     color: {
                                         if (isCourseSelectedSafe(originalIndex)) {
                                             return "#dbeafe"
-                                        } else if (selectedCoursesRepeater.count >= 7) {
+                                        } else if (!canAddCourseToSemester(originalIndex)) {
                                             return "#e5e7eb"
                                         } else {
                                             return "#f3f4f6"
@@ -883,7 +1101,7 @@ Page {
                                         color: {
                                             if (isCourseSelectedSafe(originalIndex)) {
                                                 return "#2563eb"
-                                            } else if (selectedCoursesRepeater.count >= 7) {
+                                            } else if (!canAddCourseToSemester(originalIndex)) {
                                                 return "#9ca3af"
                                             } else {
                                                 return "#4b5563"
@@ -915,7 +1133,7 @@ Page {
                                         font.pixelSize: 16
                                         font.bold: true
                                         color: {
-                                            if (selectedCoursesRepeater.count >= 7 && !courseSelectionController.isCourseSelected(originalIndex)) {
+                                            if (!canAddCourseToSemester(originalIndex) && !courseSelectionController.isCourseSelected(originalIndex)) {
                                                 return "#9ca3af"
                                             } else {
                                                 return "#1f2937"
@@ -936,7 +1154,7 @@ Page {
                                         text: "Instructor: " + teacherName
                                         font.pixelSize: 14
                                         color: {
-                                            if (selectedCoursesRepeater.count >= 7 && !courseSelectionController.isCourseSelected(originalIndex)) {
+                                            if (!canAddCourseToSemester(originalIndex) && !courseSelectionController.isCourseSelected(originalIndex)) {
                                                 return "#9ca3af"
                                             } else {
                                                 return "#6b7280"
@@ -954,11 +1172,23 @@ Page {
                                         return;
                                     }
 
-                                    if (selectedCoursesRepeater.count >= 7 && !isCourseSelectedSafe(originalIndex)) {
-                                        errorMessage = "You have selected the maximum of 7 courses"
-                                        errorMessageTimer.restart()
+                                    // Check if we can add this course to its semester
+                                    if (!canAddCourseToSemester(originalIndex)) {
+                                        // Get the course's semester for a more specific error message
+                                        var courseSemester = "";
+                                        if (courseSelectionController.getCourseSemester) {
+                                            courseSemester = courseSelectionController.getCourseSemester(originalIndex);
+                                        }
+
+                                        var semesterName = courseSemester === "A" ? "Semester A" :
+                                                courseSemester === "B" ? "Semester B" :
+                                                    courseSemester === "SUMMER" ? "Summer" :
+                                                    "this semester";
+
+                                        errorMessage = "You have selected the maximum of 7 courses for " + semesterName;
+                                        errorMessageTimer.restart();
                                     } else {
-                                        courseSelectionController.toggleCourseSelection(originalIndex)
+                                        courseSelectionController.toggleCourseSelection(originalIndex);
                                     }
                                 }
                             }
@@ -1082,18 +1312,35 @@ Page {
                                     right: parent.right
                                     verticalCenter: parent.verticalCenter
                                 }
-                                width: 60
+                                width: selectedSemester === "ALL" ? 150 : 60
                                 height: 30
                                 radius: 4
                                 color: "#f3f4f6"
                                 border.color: "#d1d5db"
 
+                                // Show single counter for specific semester
                                 Label {
+                                    visible: selectedSemester !== "ALL"
                                     anchors.centerIn: parent
-                                    text: selectedCoursesRepeater.count + "/7"
+                                    text: getSelectedCoursesCountBySemester(selectedSemester) + "/7"
                                     font.pixelSize: 14
                                     font.bold: true
                                     color: "#1f2937"
+                                }
+
+                                // Show breakdown for ALL
+                                Column {
+                                    visible: selectedSemester === "ALL"
+                                    anchors.centerIn: parent
+                                    spacing: 2
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "A:" + getSelectedCoursesCountBySemester("A") + " B:" + getSelectedCoursesCountBySemester("B") + " S:" + getSelectedCoursesCountBySemester("SUMMER")
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: "#1f2937"
+                                    }
                                 }
                             }
                         }
@@ -1115,11 +1362,102 @@ Page {
                             Item {
                                 id: selectedCoursesColumn
                                 width: selectedCoursesScrollView.width
-                                height: selectedCoursesRepeater.count * 58
+                                height: selectedSemester === "ALL" ? allSemesterView.height : (getSelectedCoursesForSemester(selectedSemester).length * 58)
 
+                                // View for ALL - show semester breakdown
+                                Column {
+                                    id: allSemesterView
+                                    visible: selectedSemester === "ALL"
+                                    width: parent.width
+                                    spacing: 16
+
+                                    // Semester A section
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 50
+                                        radius: 6
+                                        color: "#f0f9ff"
+                                        border.color: "#3b82f6"
+                                        border.width: 1
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 12
+
+                                            Text {
+                                                text: "📚"
+                                                font.pixelSize: 20
+                                            }
+
+                                            Text {
+                                                text: "Semester A: " + getSelectedCoursesCountBySemester("A") + "/7 courses"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                color: "#1f2937"
+                                            }
+                                        }
+                                    }
+
+                                    // Semester B section
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 50
+                                        radius: 6
+                                        color: "#f0fdf4"
+                                        border.color: "#22c55e"
+                                        border.width: 1
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 12
+
+                                            Text {
+                                                text: "📖"
+                                                font.pixelSize: 20
+                                            }
+
+                                            Text {
+                                                text: "Semester B: " + getSelectedCoursesCountBySemester("B") + "/7 courses"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                color: "#1f2937"
+                                            }
+                                        }
+                                    }
+
+                                    // Summer section
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 50
+                                        radius: 6
+                                        color: "#fffbeb"
+                                        border.color: "#f59e0b"
+                                        border.width: 1
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 12
+
+                                            Text {
+                                                text: "☀️"
+                                                font.pixelSize: 20
+                                            }
+
+                                            Text {
+                                                text: "Summer: " + getSelectedCoursesCountBySemester("SUMMER") + "/7 courses"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                color: "#1f2937"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // View for specific semester - show actual courses
                                 Repeater {
                                     id: selectedCoursesRepeater
-                                    model: courseSelectionController ? courseSelectionController.selectedCoursesModel : null
+                                    visible: selectedSemester !== "ALL"
+                                    model: selectedSemester !== "ALL" ? getSelectedCoursesForSemester(selectedSemester).length : 0
 
                                     Rectangle {
                                         width: selectedCoursesColumn.width
@@ -1128,6 +1466,11 @@ Page {
                                         radius: 6
                                         color: "#f0f9ff"
                                         border.color: "#3b82f6"
+
+                                        property var courseData: {
+                                            var courses = getSelectedCoursesForSemester(selectedSemester);
+                                            return (index < courses.length) ? courses[index] : {};
+                                        }
 
                                         Item {
                                             id: selectedCourseContent
@@ -1149,7 +1492,7 @@ Page {
 
                                                 Label {
                                                     anchors.centerIn: parent
-                                                    text: courseId
+                                                    text: parent.parent.parent.courseData.courseId || ""
                                                     font.bold: true
                                                     font.pixelSize: 12
                                                     color: "#2563eb"
@@ -1176,7 +1519,7 @@ Page {
                                                         right: parent.right
                                                     }
                                                     height: 16
-                                                    text: courseName
+                                                    text: parent.parent.parent.courseData.courseName || ""
                                                     font.pixelSize: 14
                                                     font.bold: true
                                                     color: "#1f2937"
@@ -1211,10 +1554,68 @@ Page {
                                                     id: removeMouseArea
                                                     anchors.fill: parent
                                                     hoverEnabled: true
-                                                    onClicked: courseSelectionController.deselectCourse(index)
+                                                    onClicked: {
+                                                        var originalIndex = parent.parent.parent.courseData.originalIndex;
+                                                        if (courseSelectionController && originalIndex !== undefined) {
+                                                            courseSelectionController.deselectCourse(originalIndex);
+                                                        }
+                                                    }
                                                     cursorShape: Qt.PointingHandCursor
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+
+                                // Empty state for specific semester
+                                Item {
+                                    visible: selectedSemester !== "ALL" && getSelectedCoursesForSemester(selectedSemester).length === 0
+                                    width: selectedCoursesColumn.width
+                                    height: 100
+
+                                    Item {
+                                        id: emptySelectedContent
+                                        anchors.centerIn: parent
+                                        width: 200
+                                        height: 80
+
+                                        Text {
+                                            id: emptySelectedIcon
+                                            anchors {
+                                                top: parent.top
+                                                horizontalCenter: parent.horizontalCenter
+                                            }
+                                            height: 25
+                                            text: "📖"
+                                            font.pixelSize: 20
+                                        }
+
+                                        Text {
+                                            id: emptySelectedTitle
+                                            anchors {
+                                                top: emptySelectedIcon.bottom
+                                                topMargin: 8
+                                                horizontalCenter: parent.horizontalCenter
+                                            }
+                                            height: 18
+                                            text: "No courses selected"
+                                            font.pixelSize: 14
+                                            color: "#6b7280"
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+
+                                        Text {
+                                            id: emptySelectedSubtitle
+                                            anchors {
+                                                top: emptySelectedTitle.bottom
+                                                topMargin: 8
+                                                horizontalCenter: parent.horizontalCenter
+                                            }
+                                            height: 15
+                                            text: "for " + selectedSemester + " semester"
+                                            font.pixelSize: 12
+                                            color: "#9ca3af"
+                                            horizontalAlignment: Text.AlignHCenter
                                         }
                                     }
                                 }

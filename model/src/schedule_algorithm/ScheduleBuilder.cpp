@@ -153,14 +153,52 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
             if (selection.lectureGroup) {
                 processGroupSessions(selection, selection.lectureGroup, "Lecture", daySchedules);
             }
+
             if (selection.tutorialGroup) {
                 processGroupSessions(selection, selection.tutorialGroup, "Tutorial", daySchedules);
             }
+
             if (selection.labGroup) {
                 processGroupSessions(selection, selection.labGroup, "Lab", daySchedules);
             }
+
             if (selection.blockGroup) {
                 processGroupSessions(selection, selection.blockGroup, "Block", daySchedules);
+            }
+
+            // Process departmental sessions group
+            if (selection.departmentalGroup) {
+                processGroupSessions(selection, selection.departmentalGroup, "Departmental", daySchedules);
+            }
+
+            // Process reinforcement group
+            if (selection.reinforcementGroup) {
+                processGroupSessions(selection, selection.reinforcementGroup, "Reinforcement", daySchedules);
+            }
+
+            // Process guidance group
+            if (selection.guidanceGroup) {
+                processGroupSessions(selection, selection.guidanceGroup, "Guidance", daySchedules);
+            }
+
+            // Process colloquium group
+            if (selection.colloquiumGroup) {
+                processGroupSessions(selection, selection.colloquiumGroup, "Colloquium", daySchedules);
+            }
+
+            // Process registration group
+            if (selection.registrationGroup) {
+                processGroupSessions(selection, selection.registrationGroup, "Registration", daySchedules);
+            }
+
+            // Process thesis group
+            if (selection.thesisGroup) {
+                processGroupSessions(selection, selection.thesisGroup, "Thesis", daySchedules);
+            }
+
+            // Process project group
+            if (selection.projectGroup) {
+                processGroupSessions(selection, selection.projectGroup, "Project", daySchedules);
             }
         }
 
