@@ -69,6 +69,12 @@ void SchedulesDisplayController::switchToSemester(const QString& semester) {
         m_scheduleModel->loadSchedules(m_schedulesSummer);
     }
 
+    if (m_scheduleModel && m_scheduleModel->isFiltered()) {
+        m_scheduleModel->clearScheduleFilter();
+    }
+
+    m_scheduleModel->setCurrentScheduleIndex(0);
+
     emit currentSemesterChanged();
 }
 
@@ -220,12 +226,18 @@ void SchedulesDisplayController::processBotMessage(const QString& userMessage) {
 BotQueryRequest SchedulesDisplayController::createBotQueryRequest(const QString& userMessage) {
     BotQueryRequest request;
     request.userMessage = userMessage.toStdString();
-
     request.scheduleMetadata = "";
+    request.semester = m_currentSemester.toStdString();
 
     if (m_scheduleModel) {
-        QVariantList allIds = m_scheduleModel->getAllScheduleIds();
+        // NEW: Get unique IDs as primary mechanism
+        QVariantList allUniqueIds = m_scheduleModel->getAllScheduleUniqueIds();
+        for (const QVariant& uniqueId : allUniqueIds) {
+            request.availableUniqueIds.push_back(uniqueId.toString().toStdString());
+        }
 
+        // Keep indices for backward compatibility
+        QVariantList allIds = m_scheduleModel->getAllScheduleIds();
         for (const QVariant& id : allIds) {
             request.availableScheduleIds.push_back(id.toInt());
         }
@@ -251,34 +263,57 @@ void SchedulesDisplayController::handleBotResponse(const BotQueryResponse& respo
     if (response.isFilterQuery) {
         m_scheduleModel->clearScheduleFilter();
         m_scheduleModel->setCurrentScheduleIndex(0);
-        // Get the filtered schedule IDs from model
-        void* result = modelConnection->executeOperation(ModelOperation::GET_LAST_FILTERED_IDS, nullptr, "");
 
-        if (result) {
-            auto* filteredIds = static_cast<std::vector<int>*>(result);
-
-
-            if (filteredIds->empty()) {
-                responseMessage += "\n\n❌ No schedules match your criteria.";
-
-            } else {
-                // Convert to QVariantList and apply filter
-                QVariantList qmlIds;
-                for (int id : *filteredIds) {
-                    qmlIds.append(id);
-                }
-
-                if (m_scheduleModel) {
-                    m_scheduleModel->applyScheduleFilter(qmlIds);
-
-                    emit schedulesFiltered(static_cast<int>(filteredIds->size()),
-                                           m_scheduleModel->totalScheduleCount());
-                }
+        // NEW: Primary path - use unique IDs if available
+        if (!response.filteredUniqueIds.empty()) {
+            QVariantList uniqueIdsForFilter;
+            for (const string& uniqueId : response.filteredUniqueIds) {
+                uniqueIdsForFilter.append(QString::fromStdString(uniqueId));
             }
 
-            delete filteredIds;
-        } else {
-            responseMessage += "\n\n❌ Failed to apply schedule filter. Please try again.";
+            if (m_scheduleModel) {
+                m_scheduleModel->applyScheduleFilterByUniqueIds(uniqueIdsForFilter);
+                emit schedulesFiltered(uniqueIdsForFilter.size(),
+                                       m_scheduleModel->totalScheduleCount());
+            }
+        }
+            // FALLBACK: Use old index-based system if unique IDs not available
+        else if (!response.filteredScheduleIds.empty()) {
+            // Get the filtered schedule IDs from model (legacy path)
+            void* result = modelConnection->executeOperation(ModelOperation::GET_LAST_FILTERED_IDS, nullptr, "");
+
+            if (result) {
+                auto* filteredIds = static_cast<std::vector<int>*>(result);
+
+                if (filteredIds->empty()) {
+                    responseMessage += "\n\n❌ No schedules match your criteria.";
+                } else {
+                    // Convert schedule indices to unique IDs for filtering
+                    QVariantList uniqueIdsForFilter;
+
+                    for (int scheduleIndex : *filteredIds) {
+                        QString uniqueId = m_scheduleModel->getUniqueIdByScheduleIndex(scheduleIndex);
+                        if (!uniqueId.isEmpty()) {
+                            uniqueIdsForFilter.append(uniqueId);
+                        }
+                    }
+
+                    if (m_scheduleModel && !uniqueIdsForFilter.isEmpty()) {
+                        m_scheduleModel->applyScheduleFilterByUniqueIds(uniqueIdsForFilter);
+                        emit schedulesFiltered(uniqueIdsForFilter.size(),
+                                               m_scheduleModel->totalScheduleCount());
+                    } else {
+                        responseMessage += "\n\n❌ Failed to apply schedule filter. Please try again.";
+                    }
+                }
+
+                delete filteredIds;
+            } else {
+                responseMessage += "\n\n❌ Failed to apply schedule filter. Please try again.";
+            }
+        }
+        else {
+            responseMessage += "\n\n❌ No filtering results received.";
         }
     }
 
@@ -331,7 +366,7 @@ void SchedulesDisplayController::applySorting(const QVariantMap& sortData) {
         return;
     }
 
-    // Apply sorting logic (same as before, but on current semester's schedules)
+    // Apply sorting logic (same as before, but ensure unique IDs are preserved)
     if (sortField == m_currentSortField && isAscending != m_currentSortAscending) {
         std::reverse(currentSchedules->begin(), currentSchedules->end());
     } else {
@@ -377,7 +412,10 @@ void SchedulesDisplayController::applySorting(const QVariantMap& sortData) {
     m_currentSortField = sortField;
     m_currentSortAscending = isAscending;
     m_scheduleModel->setCurrentScheduleIndex(0);
+
+    // UPDATED: Reload schedules while preserving unique ID mappings
     m_scheduleModel->loadSchedules(*currentSchedules);
+
     emit schedulesSorted(static_cast<int>(currentSchedules->size()));
 }
 
@@ -387,7 +425,7 @@ void SchedulesDisplayController::clearSorting() {
         return;
     }
 
-    // Reset to original order by index
+    // Reset to original order by index (preserve unique IDs)
     std::sort(currentSchedules->begin(), currentSchedules->end(), [](const InformativeSchedule& a, const InformativeSchedule& b) {
         return a.index < b.index;
     });
@@ -395,7 +433,9 @@ void SchedulesDisplayController::clearSorting() {
     m_currentSortField.clear();
     m_currentSortAscending = true;
 
+    // UPDATED: Reload schedules while preserving unique ID mappings
     m_scheduleModel->loadSchedules(*currentSchedules);
+
     emit schedulesSorted(static_cast<int>(currentSchedules->size()));
 }
 
@@ -409,6 +449,9 @@ void SchedulesDisplayController::saveScheduleAsCSV() {
 
     int currentIndex = m_scheduleModel->currentScheduleIndex();
     if (currentIndex >= 0 && currentIndex < static_cast<int>(currentSchedules->size())) {
+        // Get the current schedule's unique ID for better file naming
+        QString currentUniqueId = m_scheduleModel->getCurrentScheduleUniqueId();
+
         QString fileName = QFileDialog::getSaveFileName(nullptr,
                                                         "Save Schedule as CSV",
                                                         QDir::homePath() + "/" + generateFilename("",

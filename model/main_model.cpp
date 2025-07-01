@@ -1,126 +1,189 @@
 #include "main_model.h"
 
+mutex Model::dataAccessMutex;
 vector<int> Model::lastFilteredScheduleIds;
+vector<string> Model::lastFilteredUniqueIds;
 vector<Course> Model::lastGeneratedCourses;
 vector<InformativeSchedule> Model::lastGeneratedSchedules;
+map<string, vector<InformativeSchedule>> Model::semesterSchedules;
+
 
 // main model menu
 void* Model::executeOperation(ModelOperation operation, const void* data, const string& path) {
-    switch (operation) {
-        case ModelOperation::GENERATE_COURSES: {
-            if (!path.empty()) {
-                lastGeneratedCourses = generateCourses(path);
-                return &lastGeneratedCourses;
-            } else {
-                Logger::get().logError("File not found, aborting...");
-                return nullptr;
-            }
-        }
-
-        case ModelOperation::LOAD_FROM_HISTORY: {
-            if (data) {
-                const auto* fileLoadData = static_cast<const FileLoadData*>(data);
-                lastGeneratedCourses = loadCoursesFromHistory(fileLoadData->fileIds);
-                return &lastGeneratedCourses;
-            } else {
-                Logger::get().logError("No file IDs provided for history loading");
-                return nullptr;
-            }
-        }
-
-        case ModelOperation::GET_FILE_HISTORY: {
-            auto* fileHistory = new vector<FileEntity>(getFileHistory());
-            return fileHistory;
-        }
-
-        case ModelOperation::DELETE_FILE_FROM_HISTORY: {
-            if (data) {
-                const int* fileId = static_cast<const int*>(data);
-                bool success = deleteFileFromHistory(*fileId);
-                bool* result = new bool(success);
-                return result;
-            } else {
-                Logger::get().logError("No file ID provided for deletion");
-                return nullptr;
-            }
-        }
-
-        case ModelOperation::VALIDATE_COURSES: {
-            if (data) {
-                const auto* courses = static_cast<const vector<Course>*>(data);
-                auto* validationResult = new vector<string>(validateCourses(*courses));
-                return validationResult;
-            } else {
-                Logger::get().logError("No courses were found for validation, aborting...");
-                return nullptr;
-            }
-        }
-
-        case ModelOperation::GENERATE_SCHEDULES: {
-            if (data) {
-                const auto* courses = static_cast<const vector<Course>*>(data);
-                lastGeneratedSchedules = generateSchedules(*courses);
-                return &lastGeneratedSchedules;
-            } else {
-                Logger::get().logError("unable to generate schedules, aborting...");
-                return nullptr;
-            }
-        }
-
-        case ModelOperation::SAVE_SCHEDULE: {
-            if (data && !path.empty()) {
-                const auto* schedule = static_cast<const InformativeSchedule*>(data);
-                saveSchedule(*schedule, path);
-            } else {
-                Logger::get().logError("unable to save schedule, aborting...");
-            }
-            break;
-        }
-
-        case ModelOperation::PRINT_SCHEDULE: {
-            if (data) {
-                const auto* schedule = static_cast<const InformativeSchedule*>(data);
-                printSchedule(*schedule);
-            } else {
-                Logger::get().logError("unable to print schedule, aborting...");
-            }
-            break;
-        }
-
-        case ModelOperation::BOT_QUERY_SCHEDULES: {
-            if (data) {
-                const auto* queryRequest = static_cast<const BotQueryRequest*>(data);
-                auto* response = new BotQueryResponse();
-
-                try {
-                    *response = processClaudeQuery(*queryRequest);
-
-                    return response;
-
-                } catch (const std::exception& e) {
-                    Logger::get().logError("Exception in demo bot query processing: " + std::string(e.what()));
-                    response->hasError = true;
-                    response->errorMessage = "An error occurred while processing your demo request";
-                    response->isFilterQuery = false;
-                    return response;
+    try {
+        switch (operation) {
+            case ModelOperation::GENERATE_COURSES: {
+                if (!path.empty()) {
+                    auto* courses = new vector<Course>(generateCourses(path));
+                    if (!courses->empty()) {
+                        lock_guard<mutex> lock(dataAccessMutex);
+                        lastGeneratedCourses = *courses;
+                    }
+                    return courses;
+                } else {
+                    Logger::get().logError("File not found, aborting...");
+                    return nullptr;
                 }
+            }
 
-            } else {
-                Logger::get().logError("No bot query request provided");
-                return nullptr;
+            case ModelOperation::LOAD_FROM_HISTORY: {
+                if (data) {
+                    // FIX: Correct cast to FileLoadData
+                    const auto* loadData = static_cast<const FileLoadData*>(data);
+                    auto* courses = new vector<Course>(loadCoursesFromHistory(loadData->fileIds));
+                    if (!courses->empty()) {
+                        lock_guard<mutex> lock(dataAccessMutex);
+                        lastGeneratedCourses = *courses;
+                    }
+                    return courses;
+                } else {
+                    Logger::get().logError("No file IDs provided for history loading");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::GET_FILE_HISTORY: {
+                // FIX: Return actual file history, not validate courses
+                try {
+                    auto* fileHistory = new vector<FileEntity>(getFileHistory());
+                    return fileHistory;
+                } catch (const std::exception& e) {
+                    Logger::get().logError("Exception getting file history: " + std::string(e.what()));
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::DELETE_FILE_FROM_HISTORY: {
+                if (data) {
+                    const int* fileId = static_cast<const int*>(data);
+                    bool success = deleteFileFromHistory(*fileId);
+                    bool* result = new bool(success);
+                    return result;
+                } else {
+                    Logger::get().logError("No file ID provided for deletion");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::VALIDATE_COURSES: {
+                if (data) {
+                    const auto* courses = static_cast<const vector<Course>*>(data);
+                    auto* validationResult = new vector<string>(validateCourses(*courses));
+                    return validationResult;
+                } else {
+                    Logger::get().logError("No courses were found for validation, aborting...");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::GENERATE_SCHEDULES: {
+                if (data) {
+                    const auto* courses = static_cast<const vector<Course>*>(data);
+                    auto* schedules = new vector<InformativeSchedule>(generateSchedules(*courses, path));
+
+                    if (!schedules->empty()) {
+                        lock_guard<mutex> lock(dataAccessMutex);
+                        lastGeneratedSchedules = *schedules;
+                        semesterSchedules[path] = *schedules;
+                    }
+                    return schedules;
+                } else {
+                    Logger::get().logError("unable to generate schedules, aborting...");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::SAVE_SCHEDULE: {
+                if (data && !path.empty()) {
+                    const auto* schedule = static_cast<const InformativeSchedule*>(data);
+                    saveSchedule(*schedule, path);
+                } else {
+                    Logger::get().logError("unable to save schedule, aborting...");
+                }
+                break;
+            }
+
+            case ModelOperation::PRINT_SCHEDULE: {
+                if (data) {
+                    const auto* schedule = static_cast<const InformativeSchedule*>(data);
+                    printSchedule(*schedule);
+                } else {
+                    Logger::get().logError("unable to print schedule, aborting...");
+                }
+                break;
+            }
+
+            case ModelOperation::BOT_QUERY_SCHEDULES: {
+                if (data) {
+                    const auto* queryRequest = static_cast<const BotQueryRequest*>(data);
+                    auto* response = new BotQueryResponse();
+
+                    try {
+                        *response = processClaudeQuery(*queryRequest);
+                        return response;
+
+                    } catch (const std::exception& e) {
+                        Logger::get().logError("Exception in bot query processing: " + std::string(e.what()));
+                        response->hasError = true;
+                        response->errorMessage = "An error occurred while processing your request";
+                        response->isFilterQuery = false;
+                        return response;
+                    }
+
+                } else {
+                    Logger::get().logError("No bot query request provided");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::GET_LAST_FILTERED_IDS: {
+                lock_guard<mutex> lock(dataAccessMutex);
+                auto* result = new std::vector<int>(lastFilteredScheduleIds);
+                return result;
+            }
+
+            case ModelOperation::CLEAN_SCHEDULES: {
+                try {
+                    CleanupManager::performCleanup();
+                } catch (const std::exception& e) {
+                    Logger::get().logError("Exception during cleanup: " + std::string(e.what()));
+                }
+                break;
+            }
+
+            case ModelOperation::GET_LAST_FILTERED_UNIQUE_IDS: {
+                lock_guard<mutex> lock(dataAccessMutex);
+                auto* result = new std::vector<string>(lastFilteredUniqueIds);
+                return result;
+            }
+
+            case ModelOperation::CONVERT_UNIQUE_IDS_TO_INDICES: {
+                if (data) {
+                    const auto* request = static_cast<const UniqueIdConversionRequest*>(data);
+                    auto* result = new vector<int>(convertUniqueIdsToScheduleIndices(request->uniqueIds, request->semester));
+                    return result;
+                } else {
+                    Logger::get().logError("No conversion request provided");
+                    return nullptr;
+                }
+            }
+
+            case ModelOperation::CONVERT_INDICES_TO_UNIQUE_IDS: {
+                if (data) {
+                    const auto* request = static_cast<const IndexConversionRequest*>(data);
+                    auto* result = new vector<string>(convertScheduleIndicesToUniqueIds(request->indices, request->semester));
+                    return result;
+                } else {
+                    Logger::get().logError("No conversion request provided");
+                    return nullptr;
+                }
             }
         }
-
-        case ModelOperation::GET_LAST_FILTERED_IDS: {
-            auto* result = new std::vector<int>(lastFilteredScheduleIds);
-            return result;
-        }
-
-        case ModelOperation::CLEAN_SCHEDULES: {
-            CleanupManager::performCleanup();
-            break;
-        }
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in executeOperation: " + std::string(e.what()));
+        return nullptr;
     }
+
     return nullptr;
 }
 
@@ -374,58 +437,31 @@ vector<string> Model::validateCourses(const vector<Course>& courses) {
 
 // Manage schedules
 
-vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userInput) {
+vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userInput, const string& semester) {
     if (userInput.empty() || userInput.size() > 8) {
         Logger::get().logError("invalid amount of courses (" + std::to_string(userInput.size()) + "), aborting...");
         return {};
     }
 
-    Logger::get().logInfo("Generating schedules for " + std::to_string(userInput.size()) + " courses");
-
-    bool enableProgressiveWriting = true;
+    Logger::get().logInfo("Generating schedules for " + std::to_string(userInput.size()) +
+                          " courses in semester " + semester);
 
     ScheduleBuilder builder;
     vector<InformativeSchedule> schedules;
 
     try {
-        auto &dbIntegration = ModelDatabaseIntegration::getInstance();
-        if (!dbIntegration.isInitialized()) {
-            if (!dbIntegration.initializeDatabase()) {
-                Logger::get().logWarning("Database not available - proceeding without progressive writing");
-                enableProgressiveWriting = false;
-            }
-        }
-    } catch (const std::exception &e) {
-        Logger::get().logWarning("Database error - proceeding without progressive writing: " + string(e.what()));
-        enableProgressiveWriting = false;
-    }
+        schedules = builder.build(userInput, semester);
 
-    if (enableProgressiveWriting) {
-        string setName = "Generated Schedules - " + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString();
-        vector<int> sourceFileIds; // You might want to get actual file IDs here
-        schedules = builder.build(userInput, true, setName, sourceFileIds);
-
-        auto& db = DatabaseManager::getInstance();
-        if (db.isConnected()) {
-            int savedCount = db.schedules()->getScheduleCount();
-            Logger::get().logInfo("Schedules in database after generation: " + std::to_string(savedCount));
-        }
-    } else {
-        schedules = builder.build(userInput, false);
-
-        // FALLBACK: Manual save if progressive writing failed
         if (!schedules.empty()) {
-            Logger::get().logInfo("Manually saving " + std::to_string(schedules.size()) + " schedules to database");
-            saveSchedulesToDB(schedules);
+            Logger::get().logInfo("Generated " + std::to_string(schedules.size()) +
+                                  " schedules for semester " + semester);
+
+            saveSchedulesToDB(schedules, semester);
         }
-    }
 
-    if (schedules.empty()) {
-        Logger::get().logError("unable to generate schedules, aborting process");
-        return schedules;
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception during schedule generation: " + string(e.what()));
     }
-
-    Logger::get().logInfo("Generated " + std::to_string(schedules.size()) + " possible schedules");
 
     return schedules;
 }
@@ -442,124 +478,176 @@ void Model::printSchedule(const InformativeSchedule& infoSchedule) {
     Logger::get().logInfo(message);
 }
 
-bool Model::saveSchedulesToDB(const vector<InformativeSchedule>& schedules) {
+bool Model::saveSchedulesToDB(const vector<InformativeSchedule>& schedules, const string& semester) {
     try {
         auto& dbIntegration = ModelDatabaseIntegration::getInstance();
         if (!dbIntegration.isInitialized()) {
             if (!dbIntegration.initializeDatabase()) {
-                Logger::get().logError("Failed to initialize database for schedule saving");
+                Logger::get().logWarning("Database not available for saving schedules");
                 return false;
-            }
-        }
-        return dbIntegration.saveSchedulesToDatabase(schedules);
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception saving schedules to database: " + string(e.what()));
-        return false;
-    }
-}
-
-BotQueryResponse Model::processClaudeQuery(const BotQueryRequest& request) {
-    BotQueryResponse response;
-
-    try {
-        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
-        if (!dbIntegration.isInitialized()) {
-            if (!dbIntegration.initializeDatabase()) {
-                Logger::get().logError("Database not available for processing request");
-                response.hasError = true;
-                response.errorMessage = "Database not available for processing your request";
-                return response;
             }
         }
 
         auto& db = DatabaseManager::getInstance();
         if (!db.isConnected()) {
-            Logger::get().logError("Database not connected");
-            response.hasError = true;
-            response.errorMessage = "Database connection unavailable";
-            return response;
+            Logger::get().logWarning("Database not connected for saving schedules");
+            return false;
         }
 
-        // Create enhanced request (no logging of metadata length)
-        BotQueryRequest enhancedRequest = request;
-        enhancedRequest.scheduleMetadata = db.schedules()->getSchedulesMetadataForBot();
+        // Use database manager's thread-safe batch method
+        bool success = dbIntegration.saveSchedulesToDatabase(schedules);
 
-        // Try Claude API
-        ClaudeAPIClient claudeClient;
-        response = claudeClient.processScheduleQuery(enhancedRequest);
-
-        cout << response.sqlQuery << endl;
-        for (const string& param : response.queryParameters) {
-            cout << param << endl;
-        }
-
-        // Handle rate limiting with fallback (minimal logging)
-        if (response.hasError &&
-            (response.errorMessage.find("overloaded") != std::string::npos ||
-             response.errorMessage.find("rate limit") != std::string::npos ||
-             response.errorMessage.find("429") != std::string::npos ||
-             response.errorMessage.find("529") != std::string::npos)) {
-
-            Logger::get().logWarning("Claude API overloaded - using fallback");
-            response = ClaudeAPIClient::generateFallbackResponse(enhancedRequest);
-
-            if (!response.hasError) {
-                response.userMessage = "⚠️ Claude API is currently busy, using simplified pattern matching.\n\n" + response.userMessage;
-            }
-        }
-
-        if (response.hasError) {
-            Logger::get().logError("Claude processing failed: " + response.errorMessage);
-            return response;
-        }
-
-        // Execute SQL filter if needed (minimal logging)
-        if (response.isFilterQuery && !response.sqlQuery.empty()) {
-            SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(response.sqlQuery);
-            if (!validation.isValid) {
-                Logger::get().logError("Generated query failed validation: " + validation.errorMessage);
-                response.hasError = true;
-                response.errorMessage = "Generated query failed security validation: " + validation.errorMessage;
-                return response;
-            }
-
-            vector<int> allMatchingIds = db.schedules()->executeCustomQuery(response.sqlQuery, response.queryParameters);
-
-            // Filter to available IDs
-            vector<int> filteredIds;
-            std::set<int> availableSet(request.availableScheduleIds.begin(), request.availableScheduleIds.end());
-
-            for (int scheduleId : allMatchingIds) {
-                if (availableSet.find(scheduleId) != availableSet.end()) {
-                    filteredIds.push_back(scheduleId);
-                }
-            }
-
-            lastFilteredScheduleIds = filteredIds;
-
-            // Update response message
-            if (filteredIds.empty()) {
-                response.userMessage += "\n\n❌ No schedules match your criteria in the current set.";
-                if (response.sqlQuery.find("earliest_start") != std::string::npos) {
-                    response.userMessage += "\n\n💡 Tip: Try 'start after 9 AM' or 'start after 8 AM' for more results.";
-                }
-            } else {
-                response.userMessage += "\n\n✅ Filter applied! Showing " +
-                                        std::to_string(filteredIds.size()) + " of " +
-                                        std::to_string(request.availableScheduleIds.size()) +
-                                        " schedules that match your criteria.";
-            }
+        if (success) {
+            Logger::get().logInfo("Successfully saved " + std::to_string(schedules.size()) +
+                                  " schedules for semester " + semester);
         } else {
-            // Non-filter query - return all available schedules
-            lastFilteredScheduleIds = request.availableScheduleIds;
+            Logger::get().logWarning("Failed to save schedules for semester " + semester);
         }
 
-        return response;
+        return success;
 
     } catch (const std::exception& e) {
-        Logger::get().logError("Exception in Claude query processing: " + std::string(e.what()));
-        response.hasError = true;
-        response.errorMessage = "An error occurred while processing your request: " + std::string(e.what());
-        return response;
+        Logger::get().logError("Exception saving schedules to database: " + std::string(e.what()));
+        return false;
     }
+}
+
+BotQueryResponse Model::processClaudeQuery(const BotQueryRequest& request) {
+    try {
+        Logger::get().logInfo("Model::processClaudeQuery - Processing request for semester: " + request.semester);
+
+        BotQueryResponse response = ClaudeAPIClient::ActivateBot(request);
+
+        // UPDATED: Handle both unique IDs and schedule indices
+        if (response.isFilterQuery) {
+            if (!response.filteredUniqueIds.empty()) {
+                // NEW: Primary path - use unique IDs
+                setLastFilteredUniqueIds(response.filteredUniqueIds);
+
+                // Convert unique IDs to schedule indices for backward compatibility
+                vector<int> scheduleIndices = convertUniqueIdsToScheduleIndices(response.filteredUniqueIds, request.semester);
+                setLastFilteredScheduleIds(scheduleIndices);
+                response.filteredScheduleIds = scheduleIndices;
+
+            } else if (!response.filteredScheduleIds.empty()) {
+                // FALLBACK: Support old index-based filtering
+                setLastFilteredScheduleIds(response.filteredScheduleIds);
+
+                // Convert indices to unique IDs for consistency
+                vector<string> uniqueIds = convertScheduleIndicesToUniqueIds(response.filteredScheduleIds, request.semester);
+                setLastFilteredUniqueIds(uniqueIds);
+                response.filteredUniqueIds = uniqueIds;
+            }
+        }
+
+        return response;
+
+    } catch (const std::exception &e) {
+        Logger::get().logError("Exception in Model::processClaudeQuery: " + std::string(e.what()));
+
+        BotQueryResponse errorResponse;
+        errorResponse.hasError = true;
+        errorResponse.errorMessage = "An error occurred while processing your query: " + std::string(e.what());
+        errorResponse.isFilterQuery = false;
+        return errorResponse;
+    }
+}
+
+void Model::setLastFilteredScheduleIds(const vector<int>& ids) {
+    try {
+        lock_guard<mutex> lock(dataAccessMutex);
+        lastFilteredScheduleIds = ids;
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in setLastFilteredScheduleIds: " + std::string(e.what()));
+    }
+}
+
+vector<int> Model::getLastFilteredScheduleIds() {
+    try {
+        lock_guard<mutex> lock(dataAccessMutex);
+        return lastFilteredScheduleIds;
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in getLastFilteredScheduleIds: " + std::string(e.what()));
+        return vector<int>(); // Return empty vector on error
+    }
+}
+
+void Model::setLastFilteredUniqueIds(const vector<string>& uniqueIds) {
+    try {
+        lock_guard<mutex> lock(dataAccessMutex);
+        lastFilteredUniqueIds = uniqueIds;
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in setLastFilteredUniqueIds: " + std::string(e.what()));
+    }
+}
+
+vector<string> Model::getLastFilteredUniqueIds() {
+    try {
+        lock_guard<mutex> lock(dataAccessMutex);
+        return lastFilteredUniqueIds;
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in getLastFilteredUniqueIds: " + std::string(e.what()));
+        return vector<string>();
+    }
+}
+
+vector<int> Model::convertUniqueIdsToScheduleIndices(const vector<string>& uniqueIds, const string& semester) {
+    vector<int> scheduleIndices;
+
+    try {
+        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
+        if (!dbIntegration.isInitialized()) {
+            Logger::get().logError("Database not initialized for unique ID conversion");
+            return scheduleIndices;
+        }
+
+        auto& db = DatabaseManager::getInstance();
+        if (!db.isConnected()) {
+            Logger::get().logError("Database not connected for unique ID conversion");
+            return scheduleIndices;
+        }
+
+        scheduleIndices = db.schedules()->getScheduleIndicesByUniqueIds(uniqueIds);
+
+        Logger::get().logInfo("Converted " + std::to_string(uniqueIds.size()) + " unique IDs to " +
+                              std::to_string(scheduleIndices.size()) + " schedule indices");
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception converting unique IDs to schedule indices: " + std::string(e.what()));
+    }
+
+    return scheduleIndices;
+}
+
+vector<string> Model::convertScheduleIndicesToUniqueIds(const vector<int>& indices, const string& semester) {
+    vector<string> uniqueIds;
+
+    try {
+        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
+        if (!dbIntegration.isInitialized()) {
+            Logger::get().logError("Database not initialized for index conversion");
+            return uniqueIds;
+        }
+
+        auto& db = DatabaseManager::getInstance();
+        if (!db.isConnected()) {
+            Logger::get().logError("Database not connected for index conversion");
+            return uniqueIds;
+        }
+
+        for (int index : indices) {
+            string uniqueId = db.schedules()->getUniqueIdByScheduleIndex(index, semester);
+            if (!uniqueId.empty()) {
+                uniqueIds.push_back(uniqueId);
+            }
+        }
+
+        Logger::get().logInfo("Converted " + std::to_string(indices.size()) + " schedule indices to " +
+                              std::to_string(uniqueIds.size()) + " unique IDs");
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception converting schedule indices to unique IDs: " + std::string(e.what()));
+    }
+
+    return uniqueIds;
 }

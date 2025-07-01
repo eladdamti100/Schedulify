@@ -3,6 +3,8 @@
 DatabaseSchema::DatabaseSchema(QSqlDatabase& database) : db(database) {
 }
 
+// Main db methods
+
 bool DatabaseSchema::createTables() {
     return createMetadataTable() &&
            createFileTable() &&
@@ -37,6 +39,40 @@ bool DatabaseSchema::createMetadataTable() {
     return true;
 }
 
+bool DatabaseSchema::createMetadataIndexes() {
+    Logger::get().logInfo("Creating metadata indexes...");
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_metadata_key ON metadata(key)")) {
+        Logger::get().logWarning("Failed to create metadata key index");
+        return false;
+    }
+
+    Logger::get().logInfo("Metadata indexes created successfully");
+    return true;
+}
+
+bool DatabaseSchema::tableExists(const QString& tableName) {
+    QSqlQuery query("SELECT name FROM sqlite_master WHERE type='table' AND name=?", db);
+    query.addBindValue(tableName);
+
+    if (query.exec() && query.next()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool DatabaseSchema::executeQuery(const QString& query) {
+    QSqlQuery sqlQuery(db);
+    if (!sqlQuery.exec(query)) {
+        Logger::get().logError("Failed to execute query: " + sqlQuery.lastError().text().toStdString());
+        return false;
+    }
+    return true;
+}
+
+// File management
+
 bool DatabaseSchema::createFileTable() {
     const QString query = R"(
         CREATE TABLE IF NOT EXISTS file (
@@ -56,6 +92,32 @@ bool DatabaseSchema::createFileTable() {
     Logger::get().logInfo("File table created successfully");
     return true;
 }
+
+bool DatabaseSchema::createFileIndexes() {
+    bool success = true;
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_name ON file(file_name)")) {
+        Logger::get().logWarning("Failed to create file name index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_type ON file(file_type)")) {
+        Logger::get().logWarning("Failed to create file type index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_upload_time ON file(upload_time)")) {
+        Logger::get().logWarning("Failed to create file upload_time index");
+        success = false;
+    }
+
+    if (success) {
+        Logger::get().logInfo("File indexes created successfully");
+    }
+    return success;
+}
+
+// Course management
 
 bool DatabaseSchema::createCourseTable() {
     const QString query = R"(
@@ -84,42 +146,6 @@ bool DatabaseSchema::createCourseTable() {
 
     Logger::get().logInfo("Course table created successfully");
     return true;
-}
-
-bool DatabaseSchema::createMetadataIndexes() {
-    Logger::get().logInfo("Creating metadata indexes...");
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_metadata_key ON metadata(key)")) {
-        Logger::get().logWarning("Failed to create metadata key index");
-        return false;
-    }
-
-    Logger::get().logInfo("Metadata indexes created successfully");
-    return true;
-}
-
-bool DatabaseSchema::createFileIndexes() {
-    bool success = true;
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_name ON file(file_name)")) {
-        Logger::get().logWarning("Failed to create file name index");
-        success = false;
-    }
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_type ON file(file_type)")) {
-        Logger::get().logWarning("Failed to create file type index");
-        success = false;
-    }
-
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_file_upload_time ON file(upload_time)")) {
-        Logger::get().logWarning("Failed to create file upload_time index");
-        success = false;
-    }
-
-    if (success) {
-        Logger::get().logInfo("File indexes created successfully");
-    }
-    return success;
 }
 
 bool DatabaseSchema::createCourseIndexes() {
@@ -156,31 +182,15 @@ bool DatabaseSchema::createCourseIndexes() {
     return success;
 }
 
-bool DatabaseSchema::tableExists(const QString& tableName) {
-    QSqlQuery query("SELECT name FROM sqlite_master WHERE type='table' AND name=?", db);
-    query.addBindValue(tableName);
-
-    if (query.exec() && query.next()) {
-        return true;
-    }
-
-    return false;
-}
-
-bool DatabaseSchema::executeQuery(const QString& query) {
-    QSqlQuery sqlQuery(db);
-    if (!sqlQuery.exec(query)) {
-        Logger::get().logError("Failed to execute query: " + sqlQuery.lastError().text().toStdString());
-        return false;
-    }
-    return true;
-}
+// Schedule management
 
 bool DatabaseSchema::createScheduleTable() {
     const QString query = R"(
         CREATE TABLE IF NOT EXISTS schedule (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             schedule_index INTEGER NOT NULL,
+            unique_id TEXT NOT NULL UNIQUE,
+            semester TEXT NOT NULL DEFAULT 'A',
             schedule_data_json TEXT NOT NULL,
             amount_days INTEGER NOT NULL,
             amount_gaps INTEGER NOT NULL,
@@ -216,7 +226,6 @@ bool DatabaseSchema::createScheduleTable() {
             has_sunday BOOLEAN NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            -- REMOVED: schedule_set_id and foreign key constraint
         )
     )";
 
@@ -225,12 +234,47 @@ bool DatabaseSchema::createScheduleTable() {
         return false;
     }
 
-    Logger::get().logInfo("Enhanced schedule table (v1) created successfully");
+    Logger::get().logInfo("Enhanced schedule table (v3) created successfully with unique_id and semester support");
     return true;
 }
 
 bool DatabaseSchema::createScheduleIndexes() {
     bool success = true;
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_index ON schedule(schedule_index)")) {
+        Logger::get().logWarning("Failed to create schedule index index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_semester ON schedule(semester)")) {
+        Logger::get().logWarning("Failed to create schedule semester index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_semester_index ON schedule(semester, schedule_index)")) {
+        Logger::get().logWarning("Failed to create schedule semester+index compound index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_index ON schedule(schedule_index)")) {
+        Logger::get().logWarning("Failed to create schedule index index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_unique_id ON schedule(unique_id)")) {
+        Logger::get().logWarning("Failed to create schedule unique_id index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_semester ON schedule(semester)")) {
+        Logger::get().logWarning("Failed to create schedule semester index");
+        success = false;
+    }
+
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_semester_unique ON schedule(semester, unique_id)")) {
+        Logger::get().logWarning("Failed to create schedule semester+unique_id compound index");
+        success = false;
+    }
 
     if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_schedule_index ON schedule(schedule_index)")) {
         Logger::get().logWarning("Failed to create schedule index index");
@@ -290,8 +334,5 @@ bool DatabaseSchema::createScheduleIndexes() {
         success = false;
     }
 
-    if (success) {
-        Logger::get().logInfo("Enhanced schedule indexes created successfully");
-    }
     return success;
 }

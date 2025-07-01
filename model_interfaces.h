@@ -7,6 +7,9 @@
 
 using namespace std;
 
+
+// Course structs
+
 enum class SessionType {
     LECTURE,
     TUTORIAL,
@@ -58,6 +61,9 @@ public:
     vector<Group> blocks;
 };
 
+
+// Schedule structs
+
 struct ScheduleItem {
     string courseName;
     string raw_id;
@@ -75,39 +81,49 @@ struct ScheduleDay {
 
 struct InformativeSchedule {
     int index;
+    string unique_id;
+    string semester = "A";
 
+    // Basic metrics
     int amount_days = 0;
     int amount_gaps = 0;
     int gaps_time = 0;
     int avg_start = 0;
     int avg_end = 0;
 
-    int earliest_start = 0;        // Earliest class start time (minutes from midnight)
-    int latest_end = 0;            // Latest class end time (minutes from midnight)
-    int longest_gap = 0;           // Longest single gap between classes (minutes)
-    int total_class_time = 0;      // Total minutes of actual classes
+    // Enhanced time metrics
+    int earliest_start = 0;
+    int latest_end = 0;
+    int longest_gap = 0;
+    int total_class_time = 0;
 
-    int consecutive_days = 0;      // Longest streak of consecutive class days
-    string days_json = "[]"; // Array of days with classes [1,2,3,4,5]
-    bool weekend_classes = false; // Has classes on Sat/Sun
+    // Day pattern metrics
+    int consecutive_days = 0;
+    string days_json = "[]";
+    bool weekend_classes = false;
 
-    bool has_morning_classes = false;   // Classes before 10:00 AM (600 minutes)
-    bool has_early_morning = false;     // Classes before 8:30 AM (510 minutes)
-    bool has_evening_classes = false;   // Classes after 6:00 PM (1080 minutes)
-    bool has_late_evening = false;      // Classes after 8:00 PM (1200 minutes)
+    // Time preference flags
+    bool has_morning_classes = false;
+    bool has_early_morning = false;
+    bool has_evening_classes = false;
+    bool has_late_evening = false;
 
-    int max_daily_hours = 0;       // Most hours of classes in a single day
-    int min_daily_hours = 0;       // Fewest hours on days with classes
-    int avg_daily_hours = 0;       // Average hours per study day
+    // Daily intensity metrics
+    int max_daily_hours = 0;
+    int min_daily_hours = 0;
+    int avg_daily_hours = 0;
 
-    bool has_lunch_break = false;  // Has gap between 12:00-14:00 (720-840 minutes)
-    int max_daily_gaps = 0;        // Maximum gaps in a single day
-    int avg_gap_length = 0;        // Average gap length when gaps exist
+    // Gap and break patterns
+    bool has_lunch_break = false;
+    int max_daily_gaps = 0;
+    int avg_gap_length = 0;
 
-    int schedule_span = 0;         // Time from first to last class (latest_end - earliest_start)
-    double compactness_ratio = 0.0; // total_class_time / schedule_span (efficiency measure)
+    // Efficiency metrics
+    int schedule_span = 0;
+    double compactness_ratio = 0.0;
 
-    bool weekday_only = false;     // Only Monday-Friday classes
+    // Additional boolean flags
+    bool weekday_only = false;
     bool has_monday = false;
     bool has_tuesday = false;
     bool has_wednesday = false;
@@ -125,14 +141,24 @@ struct FileLoadData {
     string filePath;
 };
 
+
+// Bot structs
+
 struct BotQueryRequest {
     string userMessage;
     string scheduleMetadata;
     vector<int> availableScheduleIds;
+    vector<string> availableUniqueIds;
+    string semester;
 
     BotQueryRequest() = default;
-    BotQueryRequest(string message, string metadata, const vector<int>& ids)
-            : userMessage(std::move(message)), scheduleMetadata(std::move(metadata)), availableScheduleIds(ids) {}
+    BotQueryRequest(string message, string metadata, string semester,const vector<int>& ids)
+            : userMessage(std::move(message)), scheduleMetadata(std::move(metadata)), semester(std::move(semester)), availableScheduleIds(ids) {}
+
+    BotQueryRequest(string message, string metadata, string semester,
+                    const vector<string>& uniqueIds, const vector<int>& indices)
+            : userMessage(std::move(message)), scheduleMetadata(std::move(metadata)),
+              semester(std::move(semester)), availableUniqueIds(uniqueIds), availableScheduleIds(indices) {}
 };
 
 struct BotQueryResponse {
@@ -142,11 +168,40 @@ struct BotQueryResponse {
     bool isFilterQuery;
     bool hasError;
     string errorMessage;
+    vector<int> filteredScheduleIds;
+    vector<string> filteredUniqueIds;
 
     BotQueryResponse() : isFilterQuery(false), hasError(false) {}
     BotQueryResponse(string message, string query, const vector<string>& params, bool isFilter)
             : userMessage(std::move(message)), sqlQuery(std::move(query)), queryParameters(params), isFilterQuery(isFilter), hasError(false) {}
+
+    BotQueryResponse(string message, string query, const vector<string>& params,
+                     bool isFilter, const vector<string>& uniqueIds)
+            : userMessage(std::move(message)), sqlQuery(std::move(query)),
+              queryParameters(params), isFilterQuery(isFilter), hasError(false),
+              filteredUniqueIds(uniqueIds) {}
 };
+
+struct UniqueIdConversionRequest {
+    vector<string> uniqueIds;
+    string semester;
+
+    UniqueIdConversionRequest() = default;
+    UniqueIdConversionRequest(const vector<string>& ids, const string& sem)
+            : uniqueIds(ids), semester(sem) {}
+};
+
+struct IndexConversionRequest {
+    vector<int> indices;
+    string semester;
+
+    IndexConversionRequest() = default;
+    IndexConversionRequest(const vector<int>& ids, const string& sem)
+            : indices(ids), semester(sem) {}
+};
+
+
+// Main model menu
 
 enum class ModelOperation {
     GENERATE_COURSES,
@@ -156,10 +211,13 @@ enum class ModelOperation {
     PRINT_SCHEDULE,
     BOT_QUERY_SCHEDULES,
     GET_LAST_FILTERED_IDS,
+    GET_LAST_FILTERED_UNIQUE_IDS,
     LOAD_FROM_HISTORY,
     GET_FILE_HISTORY,
     DELETE_FILE_FROM_HISTORY,
-    CLEAN_SCHEDULES
+    CLEAN_SCHEDULES,
+    CONVERT_UNIQUE_IDS_TO_INDICES,
+    CONVERT_INDICES_TO_UNIQUE_IDS
 };
 
 class IModel {

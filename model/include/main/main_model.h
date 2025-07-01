@@ -45,35 +45,40 @@ public:
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
 
-    // Structure for bot filter results
-    struct BotFilterResult {
-        std::vector<int> filteredScheduleIds;
-        std::string responseMessage;
-        bool hasError;
-        std::string errorMessage;
-        bool isFilterQuery;
-
-        BotFilterResult() : hasError(false), isFilterQuery(false) {}
-    };
-
 private:
     Model() {}
 
-    // Core business logic methods - these belong in main model
+    // Courses and files management
     static vector<Course> generateCourses(const string& path);
     static vector<Course> loadCoursesFromHistory(const vector<int>& fileIds);
     static vector<FileEntity> getFileHistory();
+    static bool deleteFileFromHistory(int fileId);
     static vector<string> validateCourses(const vector<Course>& courses);
-    static vector<InformativeSchedule> generateSchedules(const vector<Course>& userInput);
+
+    // Schedule generator
+    static vector<InformativeSchedule> generateSchedules(const vector<Course>& userInput, const string& semester);
+    static bool saveSchedulesToDB(const vector<InformativeSchedule>& schedules, const string& semester);
+
+    // Schedule export
     static void saveSchedule(const InformativeSchedule& infoSchedule, const string& path);
     static void printSchedule(const InformativeSchedule& infoSchedule);
-    static bool deleteFileFromHistory(int fileId);
-    static bool saveSchedulesToDB(const vector<InformativeSchedule>& schedules);
-    static BotQueryResponse processClaudeQuery(const BotQueryRequest& request);
 
-    static std::vector<int> lastFilteredScheduleIds;
+    // Bot handler
+    static BotQueryResponse processClaudeQuery(const BotQueryRequest& request);
+    static void setLastFilteredScheduleIds(const vector<int>& ids);
+    static vector<int> getLastFilteredScheduleIds();
+    static void setLastFilteredUniqueIds(const vector<string>& uniqueIds);
+    static vector<string> getLastFilteredUniqueIds();
+    static vector<int> convertUniqueIdsToScheduleIndices(const vector<string>& uniqueIds, const string& semester);
+    static vector<string> convertScheduleIndicesToUniqueIds(const vector<int>& indices, const string& semester);
+
+
+    static mutex dataAccessMutex;
+    static vector<int> lastFilteredScheduleIds;
+    static vector<string> lastFilteredUniqueIds;
     static vector<Course> lastGeneratedCourses;
     static vector<InformativeSchedule> lastGeneratedSchedules;
+    static map<string, vector<InformativeSchedule>> semesterSchedules;
 };
 
 inline IModel* getModel() {

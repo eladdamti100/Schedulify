@@ -35,9 +35,9 @@ SQLValidator::ValidationResult SQLValidator::validateScheduleQuery(const std::st
         return result;
     }
 
-    if (!requiresScheduleIndex(normalizedQuery)) {
+    if (!requiresScheduleIdentifier(normalizedQuery)) {
         result.isValid = false;
-        result.errorMessage = "Query must SELECT schedule_index column";
+        result.errorMessage = "Query must SELECT unique_id or schedule_index column";
         return result;
     }
 
@@ -55,9 +55,9 @@ bool SQLValidator::containsForbiddenKeywords(const std::string& query) {
 
     for (const std::string& keyword : forbidden) {
         QString qKeyword = QString::fromStdString(keyword);
+        // Use word boundaries to avoid false positives
         QRegularExpression regex("\\b" + qKeyword + "\\b");
         if (regex.match(qQuery).hasMatch()) {
-            // Remove: Logger::get().logWarning("Found forbidden keyword: " + keyword);
             return true;
         }
     }
@@ -75,7 +75,8 @@ bool SQLValidator::isSelectOnlyQuery(const std::string& query) {
 
     // Should not contain other statement keywords
     std::vector<std::string> statementKeywords = {
-            "insert", "update", "delete", "create", "drop", "alter", "truncate"
+            "insert", "update", "delete", "create", "drop", "alter",
+            "truncate", "merge", "replace", "call"
     };
 
     for (const std::string& keyword : statementKeywords) {
@@ -94,7 +95,6 @@ bool SQLValidator::usesWhitelistedTablesOnly(const std::string& query) {
 
     for (const std::string& table : tables) {
         if (std::find(whitelist.begin(), whitelist.end(), table) == whitelist.end()) {
-            // Remove: Logger::get().logWarning("Non-whitelisted table found: " + table);
             return false;
         }
     }
@@ -108,12 +108,11 @@ bool SQLValidator::usesWhitelistedColumnsOnly(const std::string& query) {
 
     for (const std::string& column : columns) {
         if (column == "*") {
-            // Remove: Logger::get().logWarning("Wildcard (*) not allowed in SELECT");
+            // Wildcard not allowed for security
             return false;
         }
 
         if (std::find(whitelist.begin(), whitelist.end(), column) == whitelist.end()) {
-            // Remove: Logger::get().logWarning("Non-whitelisted column found: " + column);
             return false;
         }
     }
@@ -121,10 +120,10 @@ bool SQLValidator::usesWhitelistedColumnsOnly(const std::string& query) {
     return true;
 }
 
-bool SQLValidator::requiresScheduleIndex(const std::string& query) {
+bool SQLValidator::requiresScheduleIdentifier(const std::string& query) {
     QString qQuery = QString::fromStdString(query).toLower();
 
-    // Check if schedule_index is in the SELECT clause
+    // Check if unique_id or schedule_index is in the SELECT clause
     QRegularExpression selectRegex(R"(select\s+(.+?)\s+from)", QRegularExpression::DotMatchesEverythingOption);
     QRegularExpressionMatch match = selectRegex.match(qQuery);
 
@@ -133,7 +132,9 @@ bool SQLValidator::requiresScheduleIndex(const std::string& query) {
     }
 
     QString selectClause = match.captured(1);
-    return selectClause.contains("schedule_index");
+
+    // Prefer unique_id, but accept schedule_index for backward compatibility
+    return selectClause.contains("unique_id") || selectClause.contains("schedule_index");
 }
 
 int SQLValidator::countParameters(const std::string& query) {
@@ -225,26 +226,43 @@ std::vector<std::string> SQLValidator::extractColumnNames(const std::string& que
 
 std::vector<std::string> SQLValidator::getForbiddenKeywords() {
     return {
+            // Write operations
             "insert", "update", "delete", "drop", "create", "alter",
-            "truncate", "grant", "revoke", "exec", "execute",
-            "declare", "cast", "convert", "union", "into",
-            "merge", "replace", "call", "do", "handler",
-            "load", "rename", "optimize", "repair", "analyze",
-            "check", "checksum", "restore", "backup",
-            "show", "describe", "explain" // Info commands that might leak schema
+            "truncate", "grant", "revoke", "merge", "replace",
+
+            // Execution and procedural
+            "exec", "execute", "call", "do", "handler",
+            "declare", "prepare", "deallocate",
+
+            // Data manipulation that could be dangerous
+            "union", "into", "outfile", "dumpfile", "load",
+
+            // System and schema operations
+            "show", "describe", "explain", "analyze", "check",
+            "checksum", "optimize", "repair", "backup", "restore",
+
+            // Security-sensitive operations
+            "user", "password", "privilege", "role",
+
+            // File and system operations
+            "file", "directory", "path", "system"
     };
 }
 
 std::vector<std::string> SQLValidator::getWhitelistedTables() {
     return {
-            "schedule", "schedule_set"
+            "schedule"
     };
 }
 
 std::vector<std::string> SQLValidator::getWhitelistedColumns() {
     return {
-            // Primary identifier
-            "schedule_index",
+            // Primary identifiers (unique_id is preferred)
+            "unique_id",        // NEW: Primary filtering identifier
+            "schedule_index",   // Keep for backward compatibility
+
+            // System columns
+            "id", "semester", "created_at", "updated_at",
 
             // Basic existing metrics
             "amount_days", "amount_gaps", "gaps_time", "avg_start", "avg_end",
@@ -270,10 +288,7 @@ std::vector<std::string> SQLValidator::getWhitelistedColumns() {
 
             // Individual weekday flags
             "has_monday", "has_tuesday", "has_wednesday",
-            "has_thursday", "has_friday", "has_saturday", "has_sunday",
-
-            // System columns
-            "id", "schedule_set_id", "created_at"
+            "has_thursday", "has_friday", "has_saturday", "has_sunday"
     };
 }
 
@@ -318,46 +333,4 @@ std::string SQLValidator::normalizeQuery(const std::string& query) {
     qNormalized = qNormalized.simplified();
 
     return qNormalized.toStdString();
-}
-
-bool SQLValidator::matchesPattern(const QString& query, const QString& pattern) {
-    QRegularExpression regex(pattern, QRegularExpression::CaseInsensitiveOption);
-    return regex.match(query).hasMatch();
-}
-
-std::vector<std::string> SQLValidator::tokenizeQuery(const std::string& query) {
-    std::vector<std::string> tokens;
-    QString qQuery = QString::fromStdString(query);
-
-    // Simple tokenization by whitespace and common SQL delimiters
-    QRegularExpression tokenRegex(R"([\s,()=<>!]+)");
-    QStringList tokenList = qQuery.split(tokenRegex, Qt::SkipEmptyParts);
-
-    for (const QString& token : tokenList) {
-        if (!token.trimmed().isEmpty()) {
-            tokens.push_back(token.trimmed().toStdString());
-        }
-    }
-
-    return tokens;
-}
-
-bool SQLValidator::isValidIdentifier(const std::string& identifier) {
-    if (identifier.empty()) {
-        return false;
-    }
-
-    // Must start with letter or underscore
-    if (!std::isalpha(identifier[0]) && identifier[0] != '_') {
-        return false;
-    }
-
-    // Rest must be alphanumeric or underscore
-    for (size_t i = 1; i < identifier.length(); ++i) {
-        if (!std::isalnum(identifier[i]) && identifier[i] != '_') {
-            return false;
-        }
-    }
-
-    return true;
 }

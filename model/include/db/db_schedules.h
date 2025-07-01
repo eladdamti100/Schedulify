@@ -31,6 +31,12 @@ public:
 
     // SQL filtering operations for bot functionality
     vector<int> executeCustomQuery(const string& sqlQuery, const vector<string>& parameters);
+    vector<string> executeCustomQueryForUniqueIds(const string& sqlQuery, const vector<string>& parameters);
+    string getUniqueIdByScheduleIndex(int scheduleIndex, const string& semester);
+    int getScheduleIndexByUniqueId(const string& uniqueId);
+    vector<int> getScheduleIndicesByUniqueIds(const vector<string>& uniqueIds);
+
+
     vector<InformativeSchedule> getSchedulesByIds(const vector<int>& scheduleIds);
     string getSchedulesMetadataForBot();
 
@@ -43,12 +49,15 @@ public:
 private:
     QSqlDatabase& db;
 
+    mutable mutex dbMutex;
+
     // Helper methods
     static InformativeSchedule createScheduleFromQuery(QSqlQuery& query);
     static bool isValidScheduleQuery(const string& sqlQuery);
     vector<string> getWhitelistedTables();
     static vector<string> getWhitelistedColumns();
     void debugScheduleQuery(const string& debugQuery);
+
 };
 
 #endif // DB_SCHEDULES_H

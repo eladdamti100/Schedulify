@@ -107,6 +107,21 @@ Page {
     Connections {
         target: controller
         function onSchedulesFiltered(filteredCount, totalCount) {
+            console.log("onSchedulesFiltered called with filteredCount:", filteredCount, "totalCount:", totalCount)
+
+            totalSchedules = filteredCount        // Update the visible count
+            totalAllSchedules = totalCount        // Update the total count
+            isFiltered = true                     // Mark as filtered
+
+            // Force the totalLabel to update by triggering property change
+            if (tableModel) {
+                tableModel.updateRows()
+            }
+        }
+        function onFilterStateChanged() {
+            isFiltered = controller ? controller.isFiltered : false
+            totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
+            console.log("onFilterStateChanged - isFiltered:", isFiltered, "totalSchedules:", totalSchedules)
         }
     }
 
@@ -203,7 +218,6 @@ Page {
                     color: "#1f2937"
                 }
 
-                // Fixed: Remove anchors and use Layout properties instead
                 Button {
                     id: filterResetButton
                     visible: isFiltered
@@ -433,9 +447,6 @@ Page {
                             anchors.centerIn: parent
                             text: {
                                 if (totalSchedules <= 0) return "0"
-                                if (isFiltered && totalAllSchedules > 0) {
-                                    return `${totalSchedules} (out of ${totalAllSchedules})`
-                                }
                                 return totalSchedules.toString()
                             }
                             font.pixelSize: 14
@@ -639,7 +650,7 @@ Page {
 
                     // Subtle pulse animation
                     SequentialAnimation on scale {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         loops: Animation.Infinite
                         NumberAnimation { to: 1.2; duration: 1000 }
                         NumberAnimation { to: 1.0; duration: 1000 }
@@ -730,7 +741,6 @@ Page {
                     }
                 }
 
-                // FIXED: Add explicit connections to force re-evaluation when semester data changes
                 Connections {
                     target: controller
                     function onSemesterSchedulesLoaded(semester) {
@@ -1211,14 +1221,14 @@ Page {
                     color: "#3b82f6"
 
                     SequentialAnimation on opacity {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         loops: Animation.Infinite
                         NumberAnimation { to: 0.3; duration: 800 }
                         NumberAnimation { to: 1.0; duration: 800 }
                     }
 
                     RotationAnimator on rotation {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         from: 0
                         to: 360
                         duration: 2000

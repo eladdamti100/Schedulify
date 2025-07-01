@@ -22,7 +22,7 @@ public:
         ValidationResult(bool valid = true) : isValid(valid) {}
     };
 
-    // Main validation method
+    // Main validation methods
     static ValidationResult validateScheduleQuery(const std::string& sqlQuery);
 
     // Security checks
@@ -32,7 +32,7 @@ public:
     static bool usesWhitelistedColumnsOnly(const std::string& query);
 
     // Query analysis
-    static bool requiresScheduleIndex(const std::string& query);
+    static bool requiresScheduleIdentifier(const std::string& query);
     static int countParameters(const std::string& query);
     static std::vector<std::string> extractTableNames(const std::string& query);
     static std::vector<std::string> extractColumnNames(const std::string& query);
@@ -48,11 +48,6 @@ public:
 
 private:
     SQLValidator() = default; // Static class
-
-    // Helper methods
-    static bool matchesPattern(const QString& query, const QString& pattern);
-    static std::vector<std::string> tokenizeQuery(const std::string& query);
-    static bool isValidIdentifier(const std::string& identifier);
 };
 
 #endif // SQL_VALIDATOR_H

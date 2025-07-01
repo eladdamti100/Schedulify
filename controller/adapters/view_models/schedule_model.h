@@ -4,6 +4,9 @@
 #include <QObject>
 #include <QVariant>
 #include <QVariantList>
+#include <QString>
+#include <QStringList>
+#include <QMap>
 #include "model_interfaces.h"
 
 class ScheduleModel : public QObject {
@@ -42,13 +45,25 @@ public:
     Q_INVOKABLE bool canJumpToSchedule(int index);
     Q_INVOKABLE void jumpToSchedule(int index);
 
-    // New filtering methods
+    // Filtering methods (backward compatibility with indices)
     Q_INVOKABLE void applyScheduleFilter(const QVariantList& scheduleIds);
     Q_INVOKABLE void clearScheduleFilter();
     Q_INVOKABLE QVariantList getAllScheduleIds() const;
 
+    // NEW: Unique ID support methods
+    Q_INVOKABLE QVariantList getAllScheduleUniqueIds() const;
+    Q_INVOKABLE void applyScheduleFilterByUniqueIds(const QVariantList& uniqueIds);
+    Q_INVOKABLE QString getCurrentScheduleUniqueId() const;
+    Q_INVOKABLE int getScheduleIndexByUniqueId(const QString& uniqueId) const;
+    Q_INVOKABLE QString getUniqueIdByScheduleIndex(int index) const;
+
     // Get current visible schedules (filtered or all)
     const vector<InformativeSchedule>& getCurrentSchedules() const;
+
+    // Additional utility methods
+    Q_INVOKABLE QVariant getCurrentScheduleData() const;
+    Q_INVOKABLE QString getDayName(int dayIndex) const;
+    Q_INVOKABLE int getCurrentScheduleDisplayNumber() const;
 
 signals:
     void currentScheduleIndexChanged();
@@ -59,16 +74,30 @@ signals:
     void totalScheduleCountChanged();
 
 private:
-    vector<InformativeSchedule> m_allSchedules;  // All loaded schedules
+    // Schedule data storage
+    vector<InformativeSchedule> m_allSchedules;       // All loaded schedules
     vector<InformativeSchedule> m_filteredSchedules;  // Currently visible schedules
-    vector<int> m_filteredIds;  // IDs of filtered schedules
+    vector<int> m_filteredIds;                        // IDs of filtered schedules (old system)
+
+    // Current state
     int m_currentScheduleIndex;
     bool m_isFiltered;
+
+    // Unique ID mappings
+    QStringList m_allUniqueIds;                       // All schedule unique IDs
+    QStringList m_filteredUniqueIds;                  // Currently filtered unique IDs
+    QMap<QString, int> m_uniqueIdToIndex;             // Maps unique ID to position in m_allSchedules
+    QMap<int, QString> m_indexToUniqueId;             // Maps position to unique ID
 
     // Helper methods
     void updateFilteredSchedules();
     void resetCurrentIndex();
     const vector<InformativeSchedule>& getActiveSchedules() const;
+
+    // Unique ID helper methods
+    void updateUniqueIdMappings();
+    void rebuildFilteredSchedulesFromUniqueIds(const QStringList& uniqueIds);
+    void notifyDataChanged();
 };
 
 #endif // SCHEDULE_MODEL_H

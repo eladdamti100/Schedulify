@@ -303,7 +303,7 @@ void CourseSelectionController::generateSemesterSchedules(const QString& semeste
 
     // Create a worker thread for the operation
     workerThread = new QThread();
-    auto* worker = new ScheduleGenerator(modelConnection, coursesToProcess);
+    auto* worker = new ScheduleGenerator(modelConnection, coursesToProcess, semester);
     worker->moveToThread(workerThread);
 
     // Connect signals/slots with semester information
@@ -333,7 +333,9 @@ void CourseSelectionController::generateSemesterSchedules(const QString& semeste
             }
         });
     }
-}// Handle completion of semester schedule generation
+}
+
+// Handle completion of semester schedule generation
 void CourseSelectionController::onSemesterSchedulesGenerated(const QString& semester, vector<InformativeSchedule>* schedules) {
     // Hide loading overlay
     auto* engine = qobject_cast<QQmlApplicationEngine*>(getEngine());

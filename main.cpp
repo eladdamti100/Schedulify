@@ -44,6 +44,10 @@ int main(int argc, char *argv[])
 
     try {
         auto& dbIntegration = ModelDatabaseIntegration::getInstance();
+
+        // insert forceCleanDatabaseStart here when need to reset db
+        forceCleanDatabaseStart();
+
         if (!dbIntegration.initializeDatabase()) {
             Logger::get().logWarning("Database initialization failed - continuing without persistence");
         } else {

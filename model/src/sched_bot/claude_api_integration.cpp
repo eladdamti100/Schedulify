@@ -1,4 +1,3 @@
-#include <thread>
 #include "claude_api_integration.h"
 
 struct APIResponse {
@@ -8,6 +7,140 @@ struct APIResponse {
 
     APIResponse() : response_code(0), success(false) {}
 };
+
+BotQueryResponse ClaudeAPIClient::ActivateBot(const BotQueryRequest& request) {
+    BotQueryResponse response;
+
+    try {
+        Logger::get().logInfo("ActivateBot: Processing bot query for semester: " + request.semester);
+
+        auto& db = DatabaseManager::getInstance();
+        if (!db.isConnected()) {
+            Logger::get().logError("ActivateBot: Database not connected");
+            response.hasError = true;
+            response.errorMessage = "Database connection unavailable";
+            return response;
+        }
+
+        // Create enhanced request with semester-specific metadata
+        BotQueryRequest enhancedRequest = request;
+        enhancedRequest.scheduleMetadata = db.schedules()->getSchedulesMetadataForBot();
+
+        // Add semester info to metadata
+        enhancedRequest.scheduleMetadata += "\n\nCURRENT SEMESTER FILTER: " + request.semester;
+        enhancedRequest.scheduleMetadata += "\nNOTE: Only schedules from semester " + request.semester + " are available for filtering.";
+        enhancedRequest.scheduleMetadata += "\nIMPORTANT: Always SELECT unique_id FROM schedule for filtering, not schedule_index.";
+
+        // Try Claude API
+        ClaudeAPIClient claudeClient;
+        response = claudeClient.processScheduleQuery(enhancedRequest);
+
+        // Handle rate limiting with fallback
+        if (response.hasError &&
+            (response.errorMessage.find("overloaded") != std::string::npos ||
+             response.errorMessage.find("rate limit") != std::string::npos ||
+             response.errorMessage.find("429") != std::string::npos ||
+             response.errorMessage.find("529") != std::string::npos)) {
+
+            Logger::get().logWarning("ActivateBot: Claude API overloaded - using fallback");
+            response = generateFallbackResponse(enhancedRequest);
+
+            if (!response.hasError) {
+                response.userMessage = "⚠️ Claude API is currently busy, using simplified pattern matching.\n\n" + response.userMessage;
+            }
+        }
+
+        if (response.hasError) {
+            Logger::get().logError("ActivateBot: Claude processing failed: " + response.errorMessage);
+            return response;
+        }
+
+        // Execute SQL filter if needed with semester filtering
+        if (response.isFilterQuery && !response.sqlQuery.empty()) {
+            SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(response.sqlQuery);
+            if (!validation.isValid) {
+                Logger::get().logError("ActivateBot: Generated query failed validation: " + validation.errorMessage);
+                response.hasError = true;
+                response.errorMessage = "Generated query failed security validation: " + validation.errorMessage;
+                return response;
+            }
+
+            // UPDATED: Ensure query returns unique_id and add semester filtering
+            string semesterFilteredQuery = response.sqlQuery;
+
+            // Replace schedule_index with unique_id if needed
+            size_t pos = semesterFilteredQuery.find("schedule_index");
+            if (pos != string::npos) {
+                semesterFilteredQuery.replace(pos, 14, "unique_id");
+            }
+
+            // Convert to lowercase for parsing
+            string lowerQuery = semesterFilteredQuery;
+            std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+
+            // Add semester filter to WHERE clause
+            if (lowerQuery.find("where") != string::npos) {
+                semesterFilteredQuery += " AND semester = ?";
+            } else {
+                semesterFilteredQuery += " WHERE semester = ?";
+            }
+
+            // Add semester to parameters
+            vector<string> enhancedParameters = response.queryParameters;
+            enhancedParameters.push_back(request.semester);
+
+            Logger::get().logInfo("Executing semester-filtered query: " + semesterFilteredQuery);
+            Logger::get().logInfo("Parameters: " + std::to_string(enhancedParameters.size()) + " total, last one is semester: " + request.semester);
+
+            // NEW: Execute query to get unique_ids directly
+            vector<string> matchingUniqueIds = db.schedules()->executeCustomQueryForUniqueIds(semesterFilteredQuery, enhancedParameters);
+
+            // Convert available schedule IDs to unique IDs for filtering
+            vector<string> availableUniqueIds;
+            for (int scheduleIndex : request.availableScheduleIds) {
+                string uniqueId = db.schedules()->getUniqueIdByScheduleIndex(scheduleIndex, request.semester);
+                if (!uniqueId.empty()) {
+                    availableUniqueIds.push_back(uniqueId);
+                }
+            }
+
+            // Filter to only include available schedules
+            vector<string> filteredUniqueIds;
+            std::set<string> availableSet(availableUniqueIds.begin(), availableUniqueIds.end());
+
+            for (const string& uniqueId : matchingUniqueIds) {
+                if (availableSet.find(uniqueId) != availableSet.end()) {
+                    filteredUniqueIds.push_back(uniqueId);
+                }
+            }
+
+            // NEW: Store unique IDs as primary result
+            response.filteredUniqueIds = filteredUniqueIds;
+
+            // Convert back to schedule indices for backward compatibility
+            vector<int> filteredIds = db.schedules()->getScheduleIndicesByUniqueIds(filteredUniqueIds);
+            response.filteredScheduleIds = filteredIds;
+
+            // Update response message
+            if (filteredUniqueIds.empty()) {
+                response.userMessage += "\n\n❌ No schedules match your criteria in semester " + request.semester + ".";
+            } else {
+                response.userMessage += "\n\n✅ Found " + std::to_string(filteredUniqueIds.size()) +
+                                        " matching schedules in semester " + request.semester + ".";
+            }
+        }
+
+        Logger::get().logInfo("ActivateBot: Successfully processed query for semester " + request.semester);
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("ActivateBot: Exception processing query: " + std::string(e.what()));
+        response.hasError = true;
+        response.errorMessage = "An error occurred while processing your query: " + std::string(e.what());
+        response.isFilterQuery = false;
+    }
+
+    return response;
+}
 
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, APIResponse* response) {
     size_t totalSize = size * nmemb;
@@ -202,27 +335,27 @@ BotQueryResponse ClaudeAPIClient::generateFallbackResponse(const BotQueryRequest
     string userMsg = request.userMessage;
     transform(userMsg.begin(), userMsg.end(), userMsg.begin(), ::tolower);
 
-    // Simple pattern matching for common queries
+    // Simple pattern matching for common queries - UPDATED to use unique_id
     if (userMsg.find("start after") != string::npos || userMsg.find("begin after") != string::npos) {
         if (userMsg.find("10") != string::npos) {
             response.userMessage = "I understand you want schedules that start after 10:00 AM. I'll look for schedules where the earliest class begins after 10:00 AM.";
-            response.sqlQuery = "SELECT schedule_index FROM schedule WHERE earliest_start > ?";
+            response.sqlQuery = "SELECT unique_id FROM schedule WHERE earliest_start > ?";
             response.queryParameters = {"600"}; // 10:00 AM = 600 minutes
             response.isFilterQuery = true;
         } else if (userMsg.find("9") != string::npos) {
             response.userMessage = "I'll find schedules that start after 9:00 AM for you.";
-            response.sqlQuery = "SELECT schedule_index FROM schedule WHERE earliest_start > ?";
+            response.sqlQuery = "SELECT unique_id FROM schedule WHERE earliest_start > ?";
             response.queryParameters = {"540"}; // 9:00 AM = 540 minutes
             response.isFilterQuery = true;
         }
     } else if (userMsg.find("no early") != string::npos || userMsg.find("not early") != string::npos) {
         response.userMessage = "I'll find schedules with no early morning classes (before 8:30 AM).";
-        response.sqlQuery = "SELECT schedule_index FROM schedule WHERE has_early_morning = ?";
+        response.sqlQuery = "SELECT unique_id FROM schedule WHERE has_early_morning = ?";
         response.queryParameters = {"0"};
         response.isFilterQuery = true;
     } else if (userMsg.find("no morning") != string::npos) {
         response.userMessage = "I'll find schedules with no morning classes (before 10:00 AM).";
-        response.sqlQuery = "SELECT schedule_index FROM schedule WHERE has_morning_classes = ?";
+        response.sqlQuery = "SELECT unique_id FROM schedule WHERE has_morning_classes = ?";
         response.queryParameters = {"0"};
         response.isFilterQuery = true;
     } else {
@@ -269,8 +402,12 @@ You are SchedBot, an expert schedule filtering assistant. Your job is to analyze
 <comprehensive_column_reference>
 FILTERABLE COLUMNS WITH DESCRIPTIONS:
 
+CRITICAL: Always use unique_id for filtering, NOT schedule_index!
+
 BASIC METRICS:
-- schedule_index: INTEGER (1-based schedule number, unique identifier)
+- unique_id: TEXT (unique identifier for each schedule - USE THIS FOR FILTERING)
+- schedule_index: INTEGER (display number only - DO NOT USE for filtering)
+- semester: TEXT (A, B, or SUMMER)
 - amount_days: INTEGER (number of study days, 1-7)
 - amount_gaps: INTEGER (total number of gaps between classes)
 - gaps_time: INTEGER (total gap time in minutes)
@@ -320,37 +457,37 @@ Common time conversions (minutes from midnight):
 </time_conversion_quick_reference>
 
 <user_query_examples>
-EXAMPLE QUERIES AND THEIR SQL:
+EXAMPLE QUERIES AND THEIR SQL (ALWAYS USE unique_id!):
 
 "Find schedules with no early morning classes"
-→ SELECT schedule_index FROM schedule WHERE has_early_morning = 0
+→ SELECT unique_id FROM schedule WHERE has_early_morning = 0
 
 "Show me schedules that start after 9 AM"
-→ SELECT schedule_index FROM schedule WHERE earliest_start > 540
+→ SELECT unique_id FROM schedule WHERE earliest_start > 540
 
 "I want schedules with maximum 4 study days and no gaps"
-→ SELECT schedule_index FROM schedule WHERE amount_days <= 4 AND amount_gaps = 0
+→ SELECT unique_id FROM schedule WHERE amount_days <= 4 AND amount_gaps = 0
 
 "Find schedules ending before 5 PM"
-→ SELECT schedule_index FROM schedule WHERE latest_end <= 1020
+→ SELECT unique_id FROM schedule WHERE latest_end <= 1020
 
 "Show schedules with classes only on weekdays"
-→ SELECT schedule_index FROM schedule WHERE weekday_only = 1
+→ SELECT unique_id FROM schedule WHERE weekday_only = 1
 
 "I want compact schedules with good efficiency"
-→ SELECT schedule_index FROM schedule WHERE compactness_ratio > 0.6
+→ SELECT unique_id FROM schedule WHERE compactness_ratio > 0.6
 
 "Find schedules with a lunch break"
-→ SELECT schedule_index FROM schedule WHERE has_lunch_break = 1
+→ SELECT unique_id FROM schedule WHERE has_lunch_break = 1
 
 "Show me schedules with no Friday classes"
-→ SELECT schedule_index FROM schedule WHERE has_friday = 0
+→ SELECT unique_id FROM schedule WHERE has_friday = 0
 
 "I want schedules with consecutive days but not too many"
-→ SELECT schedule_index FROM schedule WHERE consecutive_days >= 2 AND consecutive_days <= 4
+→ SELECT unique_id FROM schedule WHERE consecutive_days >= 2 AND consecutive_days <= 4
 
 "Find schedules with light daily workload"
-→ SELECT schedule_index FROM schedule WHERE max_daily_hours <= 6 AND avg_daily_hours <= 4
+→ SELECT unique_id FROM schedule WHERE max_daily_hours <= 6 AND avg_daily_hours <= 4
 </user_query_examples>
 
 <instructions>
@@ -362,8 +499,9 @@ PARAMETERS: [Comma-separated parameter values, or NONE]
 
 For non-filtering questions, respond normally and set SQL to NONE.
 
-ALWAYS:
-- SELECT schedule_index FROM schedule WHERE [conditions]
+CRITICAL RULES:
+- ALWAYS SELECT unique_id FROM schedule WHERE [conditions]
+- NEVER use schedule_index in SELECT statements
 - Use ? for parameters, never hardcode values
 - Use boolean columns efficiently (=1 for true, =0 for false)
 - Combine multiple conditions with AND/OR as needed
@@ -385,6 +523,7 @@ ALWAYS:
 </common_user_intents>
 
 Remember: You MUST follow the exact response format with RESPONSE:, SQL:, and PARAMETERS: labels.
+CRITICAL: Always use unique_id in SELECT statements, never schedule_index!
 )";
 
     return prompt;
