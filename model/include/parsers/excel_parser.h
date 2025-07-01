@@ -39,12 +39,53 @@ using namespace std;
 using namespace OpenXLSX;
 
 class ExcelCourseParser {
+public:
+    ExcelCourseParser();
+
+    // Main parsing method - enhanced for semester support
+    vector<Course> parseExcelFile(const string& filename);
+
+    // Course validation
+    bool validateParsedCourse(const Course& course);
+    vector<string> getParsingWarnings() const;
+
+    // Utility methods for semester handling
+    static string getSemesterName(int semesterNumber);
+    static bool isValidSemester(int semesterNumber);
+
 private:
     map<string, int> dayMap;
     map<string, SessionType> sessionTypeMap;
 
+    // Store parsing warnings/errors for debugging
+    mutable vector<string> parsingWarnings;
+
+    // Statistics tracking
+    struct ParsingStats {
+        int totalRows = 0;
+        int validCourses = 0;
+        int skippedRows = 0;
+        map<int, int> coursesBySemester;
+        map<string, int> sessionTypesCounted;
+    } stats;
+
     // Helper method to determine semester number from Hebrew period string
     int getSemesterNumber(const string& period);
+
+    // Course creation and management
+
+    void initializeCourse(Course& course, int courseId, const string& rawId,
+                          const string& courseName, const string& teacherName, int semester);
+
+    // Parsing helper methods
+
+    void initializeSessionTypeMap();
+
+    SessionType getSessionType(const string& hebrewType);
+
+    bool isValidSessionType(const string& sessionType);
+
+    string sessionTypeToString(SessionType type);
 
     // Parse multiple rooms from single cell
     vector<string> parseMultipleRooms(const string& roomStr);
@@ -55,20 +96,19 @@ private:
     // Parse a single session from time slot and room strings
     Session parseSingleSession(const string& timeSlotStr, const string& roomStr, const string& teacher);
 
-    // Get session type from Hebrew string
-    SessionType getSessionType(const string& hebrewType);
-
     // Parse course code from full code string
     pair<string, string> parseCourseCode(const string& fullCode);
 
-public:
-    ExcelCourseParser();
-
-    // Main parsing method
-    vector<Course> parseExcelFile(const string& filename);
 };
 
 // Utility function to get Hebrew day name
 string getDayName(int dayOfWeek);
+
+// Enhanced utility functions for semester handling
+namespace SemesterUtils {
+    string getHebrewSemesterName(int semester);
+    string getEnglishSemesterName(int semester);
+    bool isValidAcademicSemester(int semester);
+}
 
 #endif // EXCEL_PARSER_H

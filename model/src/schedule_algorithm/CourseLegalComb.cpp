@@ -1,10 +1,28 @@
 #include "CourseLegalComb.h"
 
-// Generates all valid combinations of groups for a given course
 vector<CourseSelection> CourseLegalComb::generate(const Course& course) {
     vector<CourseSelection> combinations;
 
     try {
+        // Validate course has required fields
+        if (course.course_key.empty()) {
+            Logger::get().logError("Course " + std::to_string(course.id) +
+                                   " is missing course_key field - cannot generate combinations");
+            return combinations;
+        }
+
+        if (course.uniqid.empty()) {
+            Logger::get().logError("Course " + std::to_string(course.id) +
+                                   " is missing uniqid field - cannot generate combinations");
+            return combinations;
+        }
+
+        if (!course.hasValidSemester()) {
+            Logger::get().logError("Course " + std::to_string(course.id) +
+                                   " has invalid semester: " + std::to_string(course.semester));
+            return combinations;
+        }
+
         // Collect all non-empty group types
         vector<pair<string, vector<const Group*>>> availableGroupTypes;
 
@@ -40,6 +58,7 @@ vector<CourseSelection> CourseLegalComb::generate(const Course& course) {
             availableGroupTypes.push_back({"labs", labGroups});
         }
 
+        // Add other group types...
         if (!course.DepartmentalSessions.empty()) {
             vector<const Group*> deptGroups;
             for (const auto& group : course.DepartmentalSessions) {
@@ -96,41 +115,44 @@ vector<CourseSelection> CourseLegalComb::generate(const Course& course) {
             availableGroupTypes.push_back({"project", projectGroups});
         }
 
-        // If no groups are available, return empty combinations
         if (availableGroupTypes.empty()) {
-            Logger::get().logWarning("No groups available for course ID " + to_string(course.id));
+            Logger::get().logWarning("No groups available for " + course.getCourseKey());
             return combinations;
         }
 
         // Generate all combinations using recursive approach
         vector<const Group*> currentCombination;
-        generateCombinationsRecursive(availableGroupTypes, 0, currentCombination, combinations, course.id);
+        generateCombinationsRecursive(availableGroupTypes, 0, currentCombination,
+                                      combinations, course);
 
         if (combinations.empty()) {
-            Logger::get().logWarning("No valid combinations generated for course ID " + to_string(course.id));
+            Logger::get().logWarning("No valid combinations generated for " + course.getCourseKey());
         } else {
-            Logger::get().logInfo("Generated " + to_string(combinations.size()) + " valid combinations for course ID " + to_string(course.id));
+            Logger::get().logInfo("Generated " + to_string(combinations.size()) +
+                                  " valid combinations for " + course.getCourseKey() +
+                                  " (semester " + to_string(course.semester) + ")");
         }
+
     } catch (const exception& e) {
-        Logger::get().logError("Exception in CourseLegalComb::generate for course ID " + to_string(course.id) + ": " + e.what());
+        Logger::get().logError("Exception in CourseLegalComb::generate for " +
+                               course.getCourseKey() + ": " + e.what());
     }
 
     return combinations;
 }
 
-// Recursive helper method to generate all combinations
 void CourseLegalComb::generateCombinationsRecursive(
         const vector<pair<string, vector<const Group*>>>& availableGroupTypes,
         int currentTypeIndex,
         vector<const Group*>& currentCombination,
         vector<CourseSelection>& combinations,
-        int courseId) {
+        const Course& course) {
 
     if (currentTypeIndex == availableGroupTypes.size()) {
         // We have selected one group from each type, check for conflicts
         if (!hasAnyCombinationConflict(currentCombination)) {
             // Create CourseSelection from current combination
-            CourseSelection selection = createCourseSelection(currentCombination, availableGroupTypes, courseId);
+            CourseSelection selection = createCourseSelection(currentCombination, availableGroupTypes, course);
             combinations.push_back(selection);
         }
         return;
@@ -140,12 +162,12 @@ void CourseLegalComb::generateCombinationsRecursive(
     const auto& currentType = availableGroupTypes[currentTypeIndex];
     for (const Group* group : currentType.second) {
         currentCombination.push_back(group);
-        generateCombinationsRecursive(availableGroupTypes, currentTypeIndex + 1, currentCombination, combinations, courseId);
+        generateCombinationsRecursive(availableGroupTypes, currentTypeIndex + 1, currentCombination,
+                                      combinations, course);
         currentCombination.pop_back();
     }
 }
 
-// Helper method to check if any groups in the combination have conflicts
 bool CourseLegalComb::hasAnyCombinationConflict(const vector<const Group*>& groups) {
     for (size_t i = 0; i < groups.size(); i++) {
         for (size_t j = i + 1; j < groups.size(); j++) {
@@ -157,14 +179,20 @@ bool CourseLegalComb::hasAnyCombinationConflict(const vector<const Group*>& grou
     return false;
 }
 
-// Helper method to create CourseSelection from the selected groups
 CourseSelection CourseLegalComb::createCourseSelection(
         const vector<const Group*>& selectedGroups,
         const vector<pair<string, vector<const Group*>>>& availableGroupTypes,
-        int courseId) {
+        const Course& course) {
 
     CourseSelection selection;
-    selection.courseId = courseId;
+
+    // Set all course-related fields using new course structure
+    selection.courseId = course.id;
+    selection.courseSemester = course.semester;
+    selection.courseUniqid = course.uniqid;
+    selection.courseKey = course.course_key;
+
+    // Initialize all group pointers to nullptr
     selection.lectureGroup = nullptr;
     selection.tutorialGroup = nullptr;
     selection.labGroup = nullptr;
@@ -207,10 +235,13 @@ CourseSelection CourseLegalComb::createCourseSelection(
         }
     }
 
+    Logger::get().logInfo("Created CourseSelection for " + selection.getDisplayName() +
+                          " with key: " + selection.courseKey + " (semester " +
+                          std::to_string(selection.courseSemester) + ")");
+
     return selection;
 }
 
-// Helper method to check if two groups have any conflicting sessions
 bool CourseLegalComb::hasGroupConflict(const Group* group1, const Group* group2) {
     if (!group1 || !group2) {
         return false;

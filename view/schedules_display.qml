@@ -639,7 +639,7 @@ Page {
 
                     // Subtle pulse animation
                     SequentialAnimation on scale {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         loops: Animation.Infinite
                         NumberAnimation { to: 1.2; duration: 1000 }
                         NumberAnimation { to: 1.0; duration: 1000 }
@@ -1211,14 +1211,14 @@ Page {
                     color: "#3b82f6"
 
                     SequentialAnimation on opacity {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         loops: Animation.Infinite
                         NumberAnimation { to: 0.3; duration: 800 }
                         NumberAnimation { to: 1.0; duration: 800 }
                     }
 
                     RotationAnimator on rotation {
-                        running: parent.visible
+                        running: parent ? parent.visible : false
                         from: 0
                         to: 360
                         duration: 2000

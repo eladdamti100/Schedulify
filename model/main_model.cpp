@@ -59,7 +59,8 @@ void* Model::executeOperation(ModelOperation operation, const void* data, const 
         case ModelOperation::GENERATE_SCHEDULES: {
             if (data) {
                 const auto* courses = static_cast<const vector<Course>*>(data);
-                lastGeneratedSchedules = generateSchedules(*courses);
+
+                lastGeneratedSchedules = generateSchedules(*courses, path);
                 return &lastGeneratedSchedules;
             } else {
                 Logger::get().logError("unable to generate schedules, aborting...");
@@ -126,19 +127,8 @@ void* Model::executeOperation(ModelOperation operation, const void* data, const 
 
 // Manage files and courses
 
-std::string getFileExtension(const std::string& filename) {
-    size_t dot = filename.find_last_of('.');
-    if (dot == std::string::npos) {
-        return "";
-    }
-    std::string ext = filename.substr(dot + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    return ext;
-}
-
 vector<Course> Model::generateCourses(const string& path) {
     vector<Course> courses;
-
     Logger::get().startCollecting();
 
     try {
@@ -179,12 +169,23 @@ vector<Course> Model::generateCourses(const string& path) {
 
             if (dbIntegration.isInitialized()) {
                 try {
-                    if (dbIntegration.loadCoursesToDatabase(courses, fileName, fileType)) {
-                        Logger::get().logInfo("SUCCESS: Courses and file metadata saved to database");
-                        Logger::get().logInfo("- File: " + fileName + " (type: " + fileType + ")");
-                        Logger::get().logInfo("- Courses: " + std::to_string(courses.size()) + " courses linked to file");
-                    } else {
-                        Logger::get().logWarning("Failed to load courses into database, continuing without persistence");
+                    auto& db = DatabaseManager::getInstance();
+                    int fileId = db.files()->insertFile(fileName, fileType);
+
+                    if (fileId > 0) {
+                        // Set uniqid for each course
+                        for (auto& course : courses) {
+                            course.generateUniqueId(fileId);
+                        }
+
+                        // Now insert courses with uniqid set
+                        if (db.courses()->insertCourses(courses, fileId)) {
+                            Logger::get().logInfo("SUCCESS: Courses with uniqid saved to database");
+                            Logger::get().logInfo("- File: " + fileName + " (type: " + fileType + ")");
+                            Logger::get().logInfo("- Courses: " + std::to_string(courses.size()) + " courses with unique IDs");
+                        } else {
+                            Logger::get().logWarning("Failed to load courses into database, continuing without persistence");
+                        }
                     }
                 } catch (const std::exception& e) {
                     Logger::get().logWarning("Database error while loading courses: " + string(e.what()));
@@ -199,7 +200,7 @@ vector<Course> Model::generateCourses(const string& path) {
         Logger::get().logError("Exception during parsing: " + string(e.what()));
     }
 
-    Logger::get().logInfo(std::to_string(courses.size()) + " courses loaded");
+    Logger::get().logInfo(std::to_string(courses.size()) + " courses loaded with unique identifiers");
     return courses;
 }
 
@@ -231,11 +232,12 @@ vector<Course> Model::loadCoursesFromHistory(const vector<int>& fileIds) {
             if (i > 0) fileIdsList += ", ";
             fileIdsList += std::to_string(fileIds[i]);
         }
+
+        // Use conflict-aware loading
         courses = dbIntegration.getCoursesByFileIds(fileIds, warnings);
 
-        Logger::get().logInfo("=== HISTORY LOADING RESULTS ===");
         Logger::get().logInfo("File IDs requested: [" + fileIdsList + "]");
-        Logger::get().logInfo("Courses loaded: " + std::to_string(courses.size()));
+        Logger::get().logInfo("Unique courses loaded: " + std::to_string(courses.size()));
         Logger::get().logInfo("Conflicts resolved: " + std::to_string(warnings.size()));
 
         if (!warnings.empty()) {
@@ -244,20 +246,19 @@ vector<Course> Model::loadCoursesFromHistory(const vector<int>& fileIds) {
             }
         }
 
-        if (courses.empty()) {
-            auto& db = DatabaseManager::getInstance();
-            if (!db.isConnected()) {
-                Logger::get().logError("Database is not connected!");
-                return courses;
-            }
-
-            for (int fileId : fileIds) {
-                FileEntity file = db.files()->getFileById(fileId);
-                if (file.id != 0) {
-                    vector<Course> fileCourses = db.courses()->getCoursesByFileId(fileId);
-                }
+        // Validate that we have unique course keys
+        set<string> uniqueKeys;
+        for (const Course& course : courses) {
+            string key = course.getCourseKey();
+            if (uniqueKeys.find(key) != uniqueKeys.end()) {
+                Logger::get().logError("DUPLICATE COURSE KEY DETECTED: " + key);
+            } else {
+                uniqueKeys.insert(key);
             }
         }
+
+        Logger::get().logInfo("Final validation: " + std::to_string(uniqueKeys.size()) +
+                              " unique course keys (should match course count)");
 
     } catch (const std::exception& e) {
         Logger::get().logError("Exception during loading from history: " + string(e.what()));
@@ -374,7 +375,7 @@ vector<string> Model::validateCourses(const vector<Course>& courses) {
 
 // Manage schedules
 
-vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userInput) {
+vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userInput, const string& semester) {
     if (userInput.empty() || userInput.size() > 8) {
         Logger::get().logError("invalid amount of courses (" + std::to_string(userInput.size()) + "), aborting...");
         return {};
@@ -402,8 +403,8 @@ vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userI
 
     if (enableProgressiveWriting) {
         string setName = "Generated Schedules - " + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss").toStdString();
-        vector<int> sourceFileIds; // You might want to get actual file IDs here
-        schedules = builder.build(userInput, true, setName, sourceFileIds);
+        vector<int> sourceFileIds;
+        schedules = builder.build(userInput, extractSemester(semester));
 
         auto& db = DatabaseManager::getInstance();
         if (db.isConnected()) {
@@ -428,34 +429,6 @@ vector<InformativeSchedule> Model::generateSchedules(const vector<Course>& userI
     Logger::get().logInfo("Generated " + std::to_string(schedules.size()) + " possible schedules");
 
     return schedules;
-}
-
-void Model::saveSchedule(const InformativeSchedule& infoSchedule, const string& path) {
-    bool status = saveScheduleToCsv(path, infoSchedule);
-    string message = status ? "Schedule saved to CSV: " + path : "An error has occurred, unable to save schedule as csv";
-    Logger::get().logInfo(message);
-}
-
-void Model::printSchedule(const InformativeSchedule& infoSchedule) {
-    bool status = printSelectedSchedule(infoSchedule);
-    string message = status ? "Schedule sent to printer" : "An error has occurred, unable to print schedule";
-    Logger::get().logInfo(message);
-}
-
-bool Model::saveSchedulesToDB(const vector<InformativeSchedule>& schedules) {
-    try {
-        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
-        if (!dbIntegration.isInitialized()) {
-            if (!dbIntegration.initializeDatabase()) {
-                Logger::get().logError("Failed to initialize database for schedule saving");
-                return false;
-            }
-        }
-        return dbIntegration.saveSchedulesToDatabase(schedules);
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception saving schedules to database: " + string(e.what()));
-        return false;
-    }
 }
 
 BotQueryResponse Model::processClaudeQuery(const BotQueryRequest& request) {
@@ -563,3 +536,56 @@ BotQueryResponse Model::processClaudeQuery(const BotQueryRequest& request) {
         return response;
     }
 }
+
+void Model::saveSchedule(const InformativeSchedule& infoSchedule, const string& path) {
+    bool status = saveScheduleToCsv(path, infoSchedule);
+    string message = status ? "Schedule saved to CSV: " + path : "An error has occurred, unable to save schedule as csv";
+    Logger::get().logInfo(message);
+}
+
+void Model::printSchedule(const InformativeSchedule& infoSchedule) {
+    bool status = printSelectedSchedule(infoSchedule);
+    string message = status ? "Schedule sent to printer" : "An error has occurred, unable to print schedule";
+    Logger::get().logInfo(message);
+}
+
+bool Model::saveSchedulesToDB(const vector<InformativeSchedule>& schedules) {
+    try {
+        auto& dbIntegration = ModelDatabaseIntegration::getInstance();
+        if (!dbIntegration.isInitialized()) {
+            if (!dbIntegration.initializeDatabase()) {
+                Logger::get().logError("Failed to initialize database for schedule saving");
+                return false;
+            }
+        }
+        return dbIntegration.saveSchedulesToDatabase(schedules);
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception saving schedules to database: " + string(e.what()));
+        return false;
+    }
+}
+
+// Helpers methods
+
+string Model::getFileExtension(const string& filename) {
+    size_t dot = filename.find_last_of('.');
+    if (dot == std::string::npos) {
+        return "";
+    }
+    std::string ext = filename.substr(dot + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext;
+}
+
+int Model::extractSemester(const string& semester) {
+    if (semester == "A") {
+        return 1;
+    } else if (semester == "B") {
+        return 2;
+    } else if (semester == "SUMMER") {
+        return 3;
+    } else {
+        return 0;
+    }
+}
+

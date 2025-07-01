@@ -1,19 +1,25 @@
 #include "db_schedules.h"
-#include "sql_validator.h"
 
 DatabaseScheduleManager::DatabaseScheduleManager(QSqlDatabase& database) : db(database) {
 }
 
-bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule) {
+// Core CRUD Operations
+
+bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule, const string& name) {
     if (!db.isOpen()) {
         Logger::get().logError("Database not open for schedule insertion");
+        return false;
+    }
+
+    if (!schedule.hasValidSemester()) {
+        Logger::get().logError("Cannot insert schedule with invalid semester: " + std::to_string(schedule.semester));
         return false;
     }
 
     QSqlQuery query(db);
     query.prepare(R"(
         INSERT INTO schedule
-        (schedule_index, schedule_data_json,
+        (schedule_index, semester, schedule_name, schedule_data_json,
          amount_days, amount_gaps, gaps_time, avg_start, avg_end,
          earliest_start, latest_end, longest_gap, total_class_time,
          consecutive_days, days_json, weekend_classes,
@@ -23,7 +29,7 @@ bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule
          schedule_span, compactness_ratio, weekday_only,
          has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
          created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     )");
 
@@ -31,61 +37,65 @@ bool DatabaseScheduleManager::insertSchedule(const InformativeSchedule& schedule
 
     // Bind all values in correct order
     query.addBindValue(schedule.index);                                     // 1
-    query.addBindValue(QString::fromStdString(scheduleJson));               // 2
+    query.addBindValue(schedule.semester);                                  // 2
+    query.addBindValue(QString::fromStdString(name));                       // 3
+    query.addBindValue(QString::fromStdString(scheduleJson));               // 4
 
-    // Basic metrics (3-7)
-    query.addBindValue(schedule.amount_days);                               // 3
-    query.addBindValue(schedule.amount_gaps);                               // 4
-    query.addBindValue(schedule.gaps_time);                                 // 5
-    query.addBindValue(schedule.avg_start);                                 // 6
-    query.addBindValue(schedule.avg_end);                                   // 7
+    // Basic metrics (5-9)
+    query.addBindValue(schedule.amount_days);                               // 5
+    query.addBindValue(schedule.amount_gaps);                               // 6
+    query.addBindValue(schedule.gaps_time);                                 // 7
+    query.addBindValue(schedule.avg_start);                                 // 8
+    query.addBindValue(schedule.avg_end);                                   // 9
 
-    // Enhanced time metrics (8-11)
-    query.addBindValue(schedule.earliest_start);                            // 8
-    query.addBindValue(schedule.latest_end);                                // 9
-    query.addBindValue(schedule.longest_gap);                               // 10
-    query.addBindValue(schedule.total_class_time);                          // 11
+    // Enhanced time metrics (10-13)
+    query.addBindValue(schedule.earliest_start);                            // 10
+    query.addBindValue(schedule.latest_end);                                // 11
+    query.addBindValue(schedule.longest_gap);                               // 12
+    query.addBindValue(schedule.total_class_time);                          // 13
 
-    // Day patterns (12-14)
-    query.addBindValue(schedule.consecutive_days);                          // 12
-    query.addBindValue(QString::fromStdString(schedule.days_json));         // 13
-    query.addBindValue(schedule.weekend_classes);                           // 14
+    // Day patterns (14-16)
+    query.addBindValue(schedule.consecutive_days);                          // 14
+    query.addBindValue(QString::fromStdString(schedule.days_json));         // 15
+    query.addBindValue(schedule.weekend_classes);                           // 16
 
-    // Time preference booleans (15-18)
-    query.addBindValue(schedule.has_morning_classes);                       // 15
-    query.addBindValue(schedule.has_early_morning);                         // 16
-    query.addBindValue(schedule.has_evening_classes);                       // 17
-    query.addBindValue(schedule.has_late_evening);                          // 18
+    // Time preference booleans (17-20)
+    query.addBindValue(schedule.has_morning_classes);                       // 17
+    query.addBindValue(schedule.has_early_morning);                         // 18
+    query.addBindValue(schedule.has_evening_classes);                       // 19
+    query.addBindValue(schedule.has_late_evening);                          // 20
 
-    // Daily intensity (19-21)
-    query.addBindValue(schedule.max_daily_hours);                           // 19
-    query.addBindValue(schedule.min_daily_hours);                           // 20
-    query.addBindValue(schedule.avg_daily_hours);                           // 21
+    // Daily intensity (21-23)
+    query.addBindValue(schedule.max_daily_hours);                           // 21
+    query.addBindValue(schedule.min_daily_hours);                           // 22
+    query.addBindValue(schedule.avg_daily_hours);                           // 23
 
-    // Gap patterns (22-24)
-    query.addBindValue(schedule.has_lunch_break);                           // 22
-    query.addBindValue(schedule.max_daily_gaps);                            // 23
-    query.addBindValue(schedule.avg_gap_length);                            // 24
+    // Gap patterns (24-26)
+    query.addBindValue(schedule.has_lunch_break);                           // 24
+    query.addBindValue(schedule.max_daily_gaps);                            // 25
+    query.addBindValue(schedule.avg_gap_length);                            // 26
 
-    // Compactness (25-27)
-    query.addBindValue(schedule.schedule_span);                             // 25
-    query.addBindValue(schedule.compactness_ratio);                         // 26
-    query.addBindValue(schedule.weekday_only);                              // 27
+    // Compactness (27-29)
+    query.addBindValue(schedule.schedule_span);                             // 27
+    query.addBindValue(schedule.compactness_ratio);                         // 28
+    query.addBindValue(schedule.weekday_only);                              // 29
 
-    // Individual weekdays (28-34)
-    query.addBindValue(schedule.has_monday);                                // 28
-    query.addBindValue(schedule.has_tuesday);                               // 29
-    query.addBindValue(schedule.has_wednesday);                             // 30
-    query.addBindValue(schedule.has_thursday);                              // 31
-    query.addBindValue(schedule.has_friday);                                // 32
-    query.addBindValue(schedule.has_saturday);                              // 33
-    query.addBindValue(schedule.has_sunday);                                // 34
+    // Individual weekdays (30-36)
+    query.addBindValue(schedule.has_monday);                                // 30
+    query.addBindValue(schedule.has_tuesday);                               // 31
+    query.addBindValue(schedule.has_wednesday);                             // 32
+    query.addBindValue(schedule.has_thursday);                              // 33
+    query.addBindValue(schedule.has_friday);                                // 34
+    query.addBindValue(schedule.has_saturday);                              // 35
+    query.addBindValue(schedule.has_sunday);                                // 36
 
     if (!query.exec()) {
         Logger::get().logError("Failed to insert schedule: " + query.lastError().text().toStdString());
         return false;
     }
 
+    Logger::get().logInfo("Successfully inserted schedule " + std::to_string(schedule.index) +
+                          " for " + schedule.getSemesterName());
     return true;
 }
 
@@ -121,6 +131,8 @@ bool DatabaseScheduleManager::deleteAllSchedules() {
     return true;
 }
 
+// Core Retrieval Operations
+
 vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
     vector<InformativeSchedule> schedules;
     if (!db.isOpen()) {
@@ -130,7 +142,7 @@ vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, schedule_index, schedule_data_json,
+        SELECT id, schedule_index, semester, schedule_data_json,
                amount_days, amount_gaps, gaps_time, avg_start, avg_end,
                earliest_start, latest_end, longest_gap, total_class_time,
                consecutive_days, days_json, weekend_classes,
@@ -140,7 +152,7 @@ vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
                schedule_span, compactness_ratio, weekday_only,
                has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
         FROM schedule
-        ORDER BY schedule_index
+        ORDER BY semester, schedule_index
     )");
 
     if (!query.exec()) {
@@ -152,115 +164,123 @@ vector<InformativeSchedule> DatabaseScheduleManager::getAllSchedules() {
         schedules.push_back(createScheduleFromQuery(query));
     }
 
-    Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules from database");
+    Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules from database (ordered by semester)");
     return schedules;
 }
 
-bool DatabaseScheduleManager::insertSchedulesBulk(const vector<InformativeSchedule>& schedules) {
-    if (!db.isOpen() || schedules.empty()) {
-        return false;
+vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesBySemester(int semester) {
+    vector<InformativeSchedule> schedules;
+    if (!db.isOpen()) {
+        Logger::get().logError("Database not open for schedule retrieval by semester");
+        return schedules;
     }
 
-    Logger::get().logInfo("Starting bulk insert of " + to_string(schedules.size()) + " schedules");
+    QSqlQuery query(db);
+    query.prepare(R"(
+        SELECT id, schedule_index, semester, schedule_data_json,
+               amount_days, amount_gaps, gaps_time, avg_start, avg_end,
+               earliest_start, latest_end, longest_gap, total_class_time,
+               consecutive_days, days_json, weekend_classes,
+               has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
+               max_daily_hours, min_daily_hours, avg_daily_hours,
+               has_lunch_break, max_daily_gaps, avg_gap_length,
+               schedule_span, compactness_ratio, weekday_only,
+               has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
+        FROM schedule
+        WHERE semester = ?
+        ORDER BY schedule_index
+    )");
+    query.addBindValue(semester);
 
-    // Optimize database for bulk operations
-    DatabaseUtils::optimizeForBulkInserts(db);
+    if (!query.exec()) {
+        Logger::get().logError("Failed to retrieve schedules by semester: " + query.lastError().text().toStdString());
+        return schedules;
+    }
+
+    while (query.next()) {
+        schedules.push_back(createScheduleFromQuery(query));
+    }
+
+    string semesterName;
+    switch (semester) {
+        case 1: semesterName = "Semester A"; break;
+        case 2: semesterName = "Semester B"; break;
+        case 3: semesterName = "Summer"; break;
+        case 4: semesterName = "Year-long"; break;
+        default: semesterName = "Semester " + to_string(semester); break;
+    }
+
+    Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules for " + semesterName);
+    return schedules;
+}
+
+vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesByIds(const vector<int>& scheduleIds) {
+    vector<InformativeSchedule> schedules;
+
+    if (!db.isOpen()) {
+        Logger::get().logError("Database not open for schedule retrieval by IDs");
+        return schedules;
+    }
+
+    if (scheduleIds.empty()) {
+        Logger::get().logWarning("No schedule IDs provided for retrieval");
+        return schedules;
+    }
 
     try {
-        // Prepare batch data
-        vector<QVariantList> batchData;
-        batchData.reserve(schedules.size());
+        // Create IN clause for the query
+        QString inClause = "(";
+        for (size_t i = 0; i < scheduleIds.size(); ++i) {
+            if (i > 0) inClause += ",";
+            inClause += "?";
+        }
+        inClause += ")";
 
-        const QString insertQuery = R"(
-            INSERT INTO schedule
-            (schedule_index, schedule_data_json,
-             amount_days, amount_gaps, gaps_time, avg_start, avg_end,
-             earliest_start, latest_end, longest_gap, total_class_time,
-             consecutive_days, days_json, weekend_classes,
-             has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
-             max_daily_hours, min_daily_hours, avg_daily_hours,
-             has_lunch_break, max_daily_gaps, avg_gap_length,
-             schedule_span, compactness_ratio, weekday_only,
-             has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
-             created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        )";
+        QString queryStr = QString(R"(
+            SELECT id, schedule_index, semester, schedule_data_json,
+                   amount_days, amount_gaps, gaps_time, avg_start, avg_end,
+                   earliest_start, latest_end, longest_gap, total_class_time,
+                   consecutive_days, days_json, weekend_classes,
+                   has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
+                   max_daily_hours, min_daily_hours, avg_daily_hours,
+                   has_lunch_break, max_daily_gaps, avg_gap_length,
+                   schedule_span, compactness_ratio, weekday_only,
+                   has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
+            FROM schedule
+            WHERE schedule_index IN %1
+            ORDER BY schedule_index
+        )").arg(inClause);
 
-        for (const auto& schedule : schedules) {
-            QVariantList values;
-            values << schedule.index                                             // 1
-                   << QString::fromStdString(DatabaseJsonHelpers::scheduleToJson(schedule)) // 2
-                   << schedule.amount_days                                       // 3
-                   << schedule.amount_gaps                                       // 4
-                   << schedule.gaps_time                                         // 5
-                   << schedule.avg_start                                         // 6
-                   << schedule.avg_end                                           // 7
-                   << schedule.earliest_start                                    // 8
-                   << schedule.latest_end                                        // 9
-                   << schedule.longest_gap                                       // 10
-                   << schedule.total_class_time                                  // 11
-                   << schedule.consecutive_days                                  // 12
-                   << QString::fromStdString(schedule.days_json)                 // 13
-                   << schedule.weekend_classes                                   // 14
-                   << schedule.has_morning_classes                               // 15
-                   << schedule.has_early_morning                                 // 16
-                   << schedule.has_evening_classes                               // 17
-                   << schedule.has_late_evening                                  // 18
-                   << schedule.max_daily_hours                                   // 19
-                   << schedule.min_daily_hours                                   // 20
-                   << schedule.avg_daily_hours                                   // 21
-                   << schedule.has_lunch_break                                   // 22
-                   << schedule.max_daily_gaps                                    // 23
-                   << schedule.avg_gap_length                                    // 24
-                   << schedule.schedule_span                                     // 25
-                   << schedule.compactness_ratio                                 // 26
-                   << schedule.weekday_only                                      // 27
-                   << schedule.has_monday                                        // 28
-                   << schedule.has_tuesday                                       // 29
-                   << schedule.has_wednesday                                     // 30
-                   << schedule.has_thursday                                      // 31
-                   << schedule.has_friday                                        // 32
-                   << schedule.has_saturday                                      // 33
-                   << schedule.has_sunday;                                       // 34
-
-            batchData.push_back(values);
+        QSqlQuery query(db);
+        if (!query.prepare(queryStr)) {
+            Logger::get().logError("Failed to prepare schedule retrieval query: " + query.lastError().text().toStdString());
+            return schedules;
         }
 
-        // Execute batch insert
-        bool success = DatabaseUtils::executeBatch(db, insertQuery, batchData);
-
-        // Restore normal database settings
-        DatabaseUtils::restoreNormalSettings(db);
-
-        if (success) {
-            Logger::get().logInfo("Bulk insert completed successfully");
-        } else {
-            Logger::get().logError("Bulk insert failed");
+        // Bind schedule IDs
+        for (int id : scheduleIds) {
+            query.addBindValue(id);
         }
 
-        return success;
+        if (!query.exec()) {
+            Logger::get().logError("Failed to execute schedule retrieval query: " + query.lastError().text().toStdString());
+            return schedules;
+        }
+
+        while (query.next()) {
+            schedules.push_back(createScheduleFromQuery(query));
+        }
+
+        Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules by IDs");
 
     } catch (const exception& e) {
-        Logger::get().logError("Exception during bulk insert: " + string(e.what()));
-        DatabaseUtils::restoreNormalSettings(db);
-        return false;
+        Logger::get().logError("Exception during schedule retrieval by IDs: " + string(e.what()));
     }
+
+    return schedules;
 }
 
-int DatabaseScheduleManager::getScheduleCount() {
-    if (!db.isOpen()) {
-        return -1;
-    }
-
-    QSqlQuery query("SELECT COUNT(*) FROM schedule", db);
-
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-
-    return -1;
-}
+// SQL Filtering for Bot Integration
 
 vector<int> DatabaseScheduleManager::executeCustomQuery(const string& sqlQuery, const vector<string>& parameters) {
     vector<int> scheduleIds;
@@ -318,71 +338,118 @@ vector<int> DatabaseScheduleManager::executeCustomQuery(const string& sqlQuery, 
     return scheduleIds;
 }
 
-vector<InformativeSchedule> DatabaseScheduleManager::getSchedulesByIds(const vector<int>& scheduleIds) {
-    vector<InformativeSchedule> schedules;
+// Utility Operations
 
+int DatabaseScheduleManager::getScheduleCount() {
     if (!db.isOpen()) {
-        Logger::get().logError("Database not open for schedule retrieval by IDs");
-        return schedules;
+        return -1;
     }
 
-    if (scheduleIds.empty()) {
-        Logger::get().logWarning("No schedule IDs provided for retrieval");
-        return schedules;
+    QSqlQuery query("SELECT COUNT(*) FROM schedule", db);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
     }
+
+    return -1;
+}
+
+// Performance Operations for Bulk Inserts
+
+bool DatabaseScheduleManager::insertSchedulesBulk(const vector<InformativeSchedule>& schedules) {
+    if (!db.isOpen() || schedules.empty()) {
+        return false;
+    }
+
+    Logger::get().logInfo("Starting bulk insert of " + to_string(schedules.size()) + " schedules");
+
+    // Optimize database for bulk operations
+    DatabaseUtils::optimizeForBulkInserts(db);
 
     try {
-        // Create IN clause for the query
-        QString inClause = "(";
-        for (size_t i = 0; i < scheduleIds.size(); ++i) {
-            if (i > 0) inClause += ",";
-            inClause += "?";
+        // Prepare batch data
+        vector<QVariantList> batchData;
+        batchData.reserve(schedules.size());
+
+        const QString insertQuery = R"(
+            INSERT INTO schedule
+            (schedule_index, semester, schedule_data_json,
+             amount_days, amount_gaps, gaps_time, avg_start, avg_end,
+             earliest_start, latest_end, longest_gap, total_class_time,
+             consecutive_days, days_json, weekend_classes,
+             has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
+             max_daily_hours, min_daily_hours, avg_daily_hours,
+             has_lunch_break, max_daily_gaps, avg_gap_length,
+             schedule_span, compactness_ratio, weekday_only,
+             has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        )";
+
+        for (const auto& schedule : schedules) {
+            QVariantList values;
+            values << schedule.index                                             // 1
+                   << schedule.semester                                          // 2
+                   << QString::fromStdString(DatabaseJsonHelpers::scheduleToJson(schedule)) // 3
+                   << schedule.amount_days                                       // 4
+                   << schedule.amount_gaps                                       // 5
+                   << schedule.gaps_time                                         // 6
+                   << schedule.avg_start                                         // 7
+                   << schedule.avg_end                                           // 8
+                   << schedule.earliest_start                                    // 9
+                   << schedule.latest_end                                        // 10
+                   << schedule.longest_gap                                       // 11
+                   << schedule.total_class_time                                  // 12
+                   << schedule.consecutive_days                                  // 13
+                   << QString::fromStdString(schedule.days_json)                 // 14
+                   << schedule.weekend_classes                                   // 15
+                   << schedule.has_morning_classes                               // 16
+                   << schedule.has_early_morning                                 // 17
+                   << schedule.has_evening_classes                               // 18
+                   << schedule.has_late_evening                                  // 19
+                   << schedule.max_daily_hours                                   // 20
+                   << schedule.min_daily_hours                                   // 21
+                   << schedule.avg_daily_hours                                   // 22
+                   << schedule.has_lunch_break                                   // 23
+                   << schedule.max_daily_gaps                                    // 24
+                   << schedule.avg_gap_length                                    // 25
+                   << schedule.schedule_span                                     // 26
+                   << schedule.compactness_ratio                                 // 27
+                   << schedule.weekday_only                                      // 28
+                   << schedule.has_monday                                        // 29
+                   << schedule.has_tuesday                                       // 30
+                   << schedule.has_wednesday                                     // 31
+                   << schedule.has_thursday                                      // 32
+                   << schedule.has_friday                                        // 33
+                   << schedule.has_saturday                                      // 34
+                   << schedule.has_sunday;                                       // 35
+
+            batchData.push_back(values);
         }
-        inClause += ")";
 
-        QString queryStr = QString(R"(
-            SELECT id, schedule_index, schedule_data_json,
-                   amount_days, amount_gaps, gaps_time, avg_start, avg_end,
-                   earliest_start, latest_end, longest_gap, total_class_time,
-                   consecutive_days, days_json, weekend_classes,
-                   has_morning_classes, has_early_morning, has_evening_classes, has_late_evening,
-                   max_daily_hours, min_daily_hours, avg_daily_hours,
-                   has_lunch_break, max_daily_gaps, avg_gap_length,
-                   schedule_span, compactness_ratio, weekday_only,
-                   has_monday, has_tuesday, has_wednesday, has_thursday, has_friday, has_saturday, has_sunday
-            FROM schedule
-            WHERE schedule_index IN %1
-            ORDER BY schedule_index
-        )").arg(inClause);
+        // Execute batch insert
+        bool success = DatabaseUtils::executeBatch(db, insertQuery, batchData);
 
-        QSqlQuery query(db);
-        if (!query.prepare(queryStr)) {
-            Logger::get().logError("Failed to prepare schedule retrieval query: " + query.lastError().text().toStdString());
-            return schedules;
+        // Restore normal database settings
+        DatabaseUtils::restoreNormalSettings(db);
+
+        if (success) {
+            Logger::get().logInfo("Bulk insert completed successfully");
+        } else {
+            Logger::get().logError("Bulk insert failed");
         }
 
-        // Bind schedule IDs
-        for (int id : scheduleIds) {
-            query.addBindValue(id);
-        }
-
-        if (!query.exec()) {
-            Logger::get().logError("Failed to execute schedule retrieval query: " + query.lastError().text().toStdString());
-            return schedules;
-        }
-
-        while (query.next()) {
-            schedules.push_back(createScheduleFromQuery(query));
-        }
-
-        Logger::get().logInfo("Retrieved " + to_string(schedules.size()) + " schedules by IDs");
+        return success;
 
     } catch (const exception& e) {
-        Logger::get().logError("Exception during schedule retrieval by IDs: " + string(e.what()));
+        Logger::get().logError("Exception during bulk insert: " + string(e.what()));
+        DatabaseUtils::restoreNormalSettings(db);
+        return false;
     }
-
-    return schedules;
 }
+
+// Bot Integration - Metadata Generation
 
 string DatabaseScheduleManager::getSchedulesMetadataForBot() {
     if (!db.isOpen()) {
@@ -396,35 +463,56 @@ string DatabaseScheduleManager::getSchedulesMetadataForBot() {
         metadata += "SCHEDULE DATABASE SCHEMA:\n";
         metadata += "Table: schedule\n";
         metadata += "Primary Key: id (internal database ID)\n";
-        metadata += "User Identifier: schedule_index (1-based schedule number for filtering)\n\n";
+        metadata += "User Identifier: schedule_index (1-based schedule number for filtering)\n";
+        metadata += "Semester Field: semester (1=Semester A, 2=Semester B, 3=Summer, 4=Year-long)\n\n";
 
-        // Get statistics
+        // Get statistics by semester
         QSqlQuery statsQuery(R"(
             SELECT
-                COUNT(*) as total_schedules,
+                semester,
+                COUNT(*) as count,
                 MIN(amount_days) as min_days, MAX(amount_days) as max_days,
                 MIN(amount_gaps) as min_gaps, MAX(amount_gaps) as max_gaps,
                 MIN(earliest_start) as min_earliest, MAX(earliest_start) as max_earliest,
                 MIN(latest_end) as min_latest, MAX(latest_end) as max_latest
             FROM schedule
+            GROUP BY semester
+            ORDER BY semester
         )", db);
 
-        if (statsQuery.exec() && statsQuery.next()) {
-            int totalSchedules = statsQuery.value("total_schedules").toInt();
-            metadata += "=== CURRENT DATA STATISTICS ===\n";
-            metadata += "Total schedules in database: " + std::to_string(totalSchedules) + "\n\n";
+        if (statsQuery.exec()) {
+            metadata += "=== SCHEDULES BY SEMESTER ===\n";
+            int totalSchedules = 0;
 
-            if (totalSchedules > 0) {
-                metadata += "VALUE RANGES:\n";
-                metadata += "- Study days: " + std::to_string(statsQuery.value("min_days").toInt()) +
-                            " to " + std::to_string(statsQuery.value("max_days").toInt()) + "\n";
-                metadata += "- Gaps: " + std::to_string(statsQuery.value("min_gaps").toInt()) +
-                            " to " + std::to_string(statsQuery.value("max_gaps").toInt()) + "\n";
-                metadata += "- Earliest start: " + std::to_string(statsQuery.value("min_earliest").toInt()) +
-                            " to " + std::to_string(statsQuery.value("max_earliest").toInt()) + " (minutes from midnight)\n";
-                metadata += "- Latest end: " + std::to_string(statsQuery.value("min_latest").toInt()) +
-                            " to " + std::to_string(statsQuery.value("max_latest").toInt()) + " (minutes from midnight)\n\n";
+            while (statsQuery.next()) {
+                int semester = statsQuery.value("semester").toInt();
+                int count = statsQuery.value("count").toInt();
+                totalSchedules += count;
+
+                string semesterName;
+                switch (semester) {
+                    case 1: semesterName = "Semester A"; break;
+                    case 2: semesterName = "Semester B"; break;
+                    case 3: semesterName = "Summer"; break;
+                    case 4: semesterName = "Year-long"; break;
+                    default: semesterName = "Semester " + to_string(semester); break;
+                }
+
+                metadata += semesterName + ": " + to_string(count) + " schedules\n";
+
+                if (count > 0) {
+                    metadata += "  - Study days: " + to_string(statsQuery.value("min_days").toInt()) +
+                                " to " + to_string(statsQuery.value("max_days").toInt()) + "\n";
+                    metadata += "  - Gaps: " + to_string(statsQuery.value("min_gaps").toInt()) +
+                                " to " + to_string(statsQuery.value("max_gaps").toInt()) + "\n";
+                    metadata += "  - Start times: " + to_string(statsQuery.value("min_earliest").toInt()) +
+                                " to " + to_string(statsQuery.value("max_earliest").toInt()) + " minutes\n";
+                    metadata += "  - End times: " + to_string(statsQuery.value("min_latest").toInt()) +
+                                " to " + to_string(statsQuery.value("max_latest").toInt()) + " minutes\n";
+                }
             }
+
+            metadata += "\nTotal schedules: " + to_string(totalSchedules) + "\n\n";
         }
 
         metadata += "=== TIME CONVERSION REFERENCE ===\n";
@@ -435,6 +523,7 @@ string DatabaseScheduleManager::getSchedulesMetadataForBot() {
         metadata += "- 6:00 PM = 1080  - 7:00 PM = 1140  - 8:00 PM = 1200  - 9:00 PM = 1260\n\n";
 
         metadata += "=== AVAILABLE COLUMNS FOR FILTERING ===\n";
+        metadata += "Semester: semester (1=A, 2=B, 3=Summer, 4=Year-long)\n";
         metadata += "Basic metrics: schedule_index, amount_days, amount_gaps, gaps_time, avg_start, avg_end\n";
         metadata += "Time metrics: earliest_start, latest_end, longest_gap, total_class_time\n";
         metadata += "Day patterns: consecutive_days, weekend_classes, weekday_only\n";
@@ -451,50 +540,56 @@ string DatabaseScheduleManager::getSchedulesMetadataForBot() {
     return metadata;
 }
 
+// Private Helper Methods
+
 InformativeSchedule DatabaseScheduleManager::createScheduleFromQuery(QSqlQuery& query) {
-    int scheduleIndex = query.value(1).toInt();
-    string scheduleJson = query.value(2).toString().toStdString();
+    int scheduleIndex = query.value("schedule_index").toInt();
+    int semester = query.value("semester").toInt();
+    string scheduleJson = query.value("schedule_data_json").toString().toStdString();
 
     // Basic metrics
-    int amountDays = query.value(3).toInt();
-    int amountGaps = query.value(4).toInt();
-    int gapsTime = query.value(5).toInt();
-    int avgStart = query.value(6).toInt();
-    int avgEnd = query.value(7).toInt();
+    int amountDays = query.value("amount_days").toInt();
+    int amountGaps = query.value("amount_gaps").toInt();
+    int gapsTime = query.value("gaps_time").toInt();
+    int avgStart = query.value("avg_start").toInt();
+    int avgEnd = query.value("avg_end").toInt();
 
     // Enhanced metrics
-    int earliestStart = query.value(8).toInt();
-    int latestEnd = query.value(9).toInt();
-    int longestGap = query.value(10).toInt();
-    int totalClassTime = query.value(11).toInt();
-    int consecutiveDays = query.value(12).toInt();
-    string daysJson = query.value(13).toString().toStdString();
-    bool weekendClasses = query.value(14).toBool();
-    bool hasMorningClasses = query.value(15).toBool();
-    bool hasEarlyMorning = query.value(16).toBool();
-    bool hasEveningClasses = query.value(17).toBool();
-    bool hasLateEvening = query.value(18).toBool();
-    int maxDailyHours = query.value(19).toInt();
-    int minDailyHours = query.value(20).toInt();
-    int avgDailyHours = query.value(21).toInt();
-    bool hasLunchBreak = query.value(22).toBool();
-    int maxDailyGaps = query.value(23).toInt();
-    int avgGapLength = query.value(24).toInt();
-    int scheduleSpan = query.value(25).toInt();
-    double compactnessRatio = query.value(26).toDouble();
-    bool weekdayOnly = query.value(27).toBool();
-    bool hasMonday = query.value(28).toBool();
-    bool hasTuesday = query.value(29).toBool();
-    bool hasWednesday = query.value(30).toBool();
-    bool hasThursday = query.value(31).toBool();
-    bool hasFriday = query.value(32).toBool();
-    bool hasSaturday = query.value(33).toBool();
-    bool hasSunday = query.value(34).toBool();
+    int earliestStart = query.value("earliest_start").toInt();
+    int latestEnd = query.value("latest_end").toInt();
+    int longestGap = query.value("longest_gap").toInt();
+    int totalClassTime = query.value("total_class_time").toInt();
+    int consecutiveDays = query.value("consecutive_days").toInt();
+    string daysJson = query.value("days_json").toString().toStdString();
+    bool weekendClasses = query.value("weekend_classes").toBool();
+    bool hasMorningClasses = query.value("has_morning_classes").toBool();
+    bool hasEarlyMorning = query.value("has_early_morning").toBool();
+    bool hasEveningClasses = query.value("has_evening_classes").toBool();
+    bool hasLateEvening = query.value("has_late_evening").toBool();
+    int maxDailyHours = query.value("max_daily_hours").toInt();
+    int minDailyHours = query.value("min_daily_hours").toInt();
+    int avgDailyHours = query.value("avg_daily_hours").toInt();
+    bool hasLunchBreak = query.value("has_lunch_break").toBool();
+    int maxDailyGaps = query.value("max_daily_gaps").toInt();
+    int avgGapLength = query.value("avg_gap_length").toInt();
+    int scheduleSpan = query.value("schedule_span").toInt();
+    double compactnessRatio = query.value("compactness_ratio").toDouble();
+    bool weekdayOnly = query.value("weekday_only").toBool();
+    bool hasMonday = query.value("has_monday").toBool();
+    bool hasTuesday = query.value("has_tuesday").toBool();
+    bool hasWednesday = query.value("has_wednesday").toBool();
+    bool hasThursday = query.value("has_thursday").toBool();
+    bool hasFriday = query.value("has_friday").toBool();
+    bool hasSaturday = query.value("has_saturday").toBool();
+    bool hasSunday = query.value("has_sunday").toBool();
 
     // Create schedule from JSON with basic metrics
     InformativeSchedule schedule = DatabaseJsonHelpers::scheduleFromJson(
             scheduleJson, 0, scheduleIndex, amountDays, amountGaps, gapsTime, avgStart, avgEnd
     );
+
+    // Set semester field
+    schedule.semester = semester;
 
     // Set enhanced metrics
     schedule.earliest_start = earliestStart;
@@ -526,6 +621,46 @@ InformativeSchedule DatabaseScheduleManager::createScheduleFromQuery(QSqlQuery& 
     schedule.has_sunday = hasSunday;
 
     return schedule;
+}
+
+vector<string> DatabaseScheduleManager::getWhitelistedTables() {
+    return {"schedule"};
+}
+
+vector<string> DatabaseScheduleManager::getWhitelistedColumns() {
+    return {
+            // Primary identifier
+            "schedule_index", "id", "semester",
+
+            // Basic existing metrics
+            "amount_days", "amount_gaps", "gaps_time", "avg_start", "avg_end",
+
+            // Enhanced time-based metrics
+            "earliest_start", "latest_end", "longest_gap", "total_class_time",
+
+            // Day pattern metrics
+            "consecutive_days", "days_json", "weekend_classes",
+
+            // Time preference flags (most commonly queried)
+            "has_morning_classes", "has_early_morning",
+            "has_evening_classes", "has_late_evening",
+
+            // Daily intensity metrics
+            "max_daily_hours", "min_daily_hours", "avg_daily_hours",
+
+            // Gap and break patterns
+            "has_lunch_break", "max_daily_gaps", "avg_gap_length",
+
+            // Schedule efficiency metrics
+            "schedule_span", "compactness_ratio", "weekday_only",
+
+            // Individual weekday flags
+            "has_monday", "has_tuesday", "has_wednesday",
+            "has_thursday", "has_friday", "has_saturday", "has_sunday",
+
+            // System columns
+            "created_at", "updated_at"
+    };
 }
 
 bool DatabaseScheduleManager::isValidScheduleQuery(const string& sqlQuery) {
@@ -564,102 +699,4 @@ bool DatabaseScheduleManager::isValidScheduleQuery(const string& sqlQuery) {
     }
 
     return true;
-}
-
-vector<string> DatabaseScheduleManager::getWhitelistedTables() {
-    return {"schedule"};
-}
-
-vector<string> DatabaseScheduleManager::getWhitelistedColumns() {
-    return {
-            "schedule_index", "amount_days", "amount_gaps", "gaps_time",
-            "avg_start", "avg_end", "id", "created_at", "earliest_start",
-            "latest_end", "longest_gap", "total_class_time", "consecutive_days",
-            "weekend_classes", "has_morning_classes", "has_early_morning",
-            "has_evening_classes", "has_late_evening", "max_daily_hours",
-            "min_daily_hours", "avg_daily_hours", "has_lunch_break",
-            "max_daily_gaps", "avg_gap_length", "schedule_span",
-            "compactness_ratio", "weekday_only", "has_monday", "has_tuesday",
-            "has_wednesday", "has_thursday", "has_friday", "has_saturday", "has_sunday"
-    };
-}
-
-void DatabaseScheduleManager::debugScheduleQuery(const string& debugQuery) {
-    if (!db.isOpen()) {
-        Logger::get().logError("Database not open for debug query");
-        return;
-    }
-
-    Logger::get().logInfo("=== DEBUG SCHEDULE QUERY ===");
-
-    // Check what data we actually have
-    QSqlQuery dataQuery(R"(
-        SELECT
-            schedule_index,
-            earliest_start,
-            avg_start,
-            amount_days
-        FROM schedule
-        ORDER BY earliest_start
-        LIMIT 10
-    )", db);
-
-    Logger::get().logInfo("Sample schedule data:");
-    if (dataQuery.exec()) {
-        while (dataQuery.next()) {
-            int index = dataQuery.value(0).toInt();
-            int earliest = dataQuery.value(1).toInt();
-            int avg = dataQuery.value(2).toInt();
-            int days = dataQuery.value(3).toInt();
-
-            Logger::get().logInfo("Schedule " + to_string(index) +
-                                  ": earliest_start=" + to_string(earliest) +
-                                  " (" + to_string(earliest/60) + ":" + to_string(earliest%60) + ")" +
-                                  ", avg_start=" + to_string(avg) +
-                                  ", days=" + to_string(days));
-        }
-    }
-
-    // Test a simple query
-    Logger::get().logInfo("Testing query: SELECT schedule_index FROM schedule WHERE earliest_start > 600");
-
-    QSqlQuery testQuery(db);
-    testQuery.prepare("SELECT schedule_index FROM schedule WHERE earliest_start > ?");
-    testQuery.addBindValue(600); // 10:00 AM = 600 minutes
-
-    if (testQuery.exec()) {
-        int count = 0;
-        Logger::get().logInfo("Schedules starting after 10:00 AM:");
-        while (testQuery.next()) {
-            int scheduleIndex = testQuery.value(0).toInt();
-            count++;
-            if (count <= 5) { // Log first 5 results
-                Logger::get().logInfo("  - Schedule " + to_string(scheduleIndex));
-            }
-        }
-        Logger::get().logInfo("Total schedules starting after 10:00 AM: " + to_string(count));
-    } else {
-        Logger::get().logError("Test query failed: " + testQuery.lastError().text().toStdString());
-    }
-
-    // Check if earliest_start field is properly populated
-    QSqlQuery nullQuery("SELECT COUNT(*) FROM schedule WHERE earliest_start IS NULL OR earliest_start = 0", db);
-    if (nullQuery.exec() && nullQuery.next()) {
-        int nullCount = nullQuery.value(0).toInt();
-        Logger::get().logInfo("Schedules with NULL/0 earliest_start: " + to_string(nullCount));
-    }
-
-    // Check the range of earliest_start values
-    QSqlQuery rangeQuery("SELECT MIN(earliest_start), MAX(earliest_start), AVG(earliest_start) FROM schedule", db);
-    if (rangeQuery.exec() && rangeQuery.next()) {
-        int minStart = rangeQuery.value(0).toInt();
-        int maxStart = rangeQuery.value(1).toInt();
-        double avgStart = rangeQuery.value(2).toDouble();
-
-        Logger::get().logInfo("earliest_start range: " + to_string(minStart) +
-                              " to " + to_string(maxStart) +
-                              " (avg: " + to_string(avgStart) + ")");
-        Logger::get().logInfo("In time format: " + to_string(minStart/60) + ":" + to_string(minStart%60) +
-                              " to " + to_string(maxStart/60) + ":" + to_string(maxStart%60));
-    }
 }

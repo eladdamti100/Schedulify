@@ -5,17 +5,45 @@
 
 struct CourseSelection {
     int courseId;
+    int courseSemester = 1;
+    string courseUniqid;
+    string courseKey;
+
     const Group* lectureGroup;
-    const Group* tutorialGroup;       // nullptr if none
-    const Group* labGroup;            // nullptr if none
-    const Group* blockGroup;          // nullptr if none
-    const Group* departmentalGroup;   // nullptr if none
-    const Group* reinforcementGroup;  // nullptr if none
-    const Group* guidanceGroup;       // nullptr if none
-    const Group* colloquiumGroup;     // nullptr if none
-    const Group* registrationGroup;   // nullptr if none
-    const Group* thesisGroup;         // nullptr if none
-    const Group* projectGroup;        // nullptr if none
+    const Group* tutorialGroup;
+    const Group* labGroup;
+    const Group* blockGroup;
+    const Group* departmentalGroup;
+    const Group* reinforcementGroup;
+    const Group* guidanceGroup;
+    const Group* colloquiumGroup;
+    const Group* registrationGroup;
+    const Group* thesisGroup;
+    const Group* projectGroup;
+
+    // Default constructor
+    CourseSelection() = default;
+
+    // Constructor that sets all course-related fields
+    CourseSelection(int id, int semester, const std::string& uniqid, const std::string& key)
+            : courseId(id), courseSemester(semester), courseUniqid(uniqid), courseKey(key) {}
+
+    // Constructor from Course object
+    explicit CourseSelection(const Course& course)
+            : courseId(course.id), courseSemester(course.semester),
+              courseUniqid(course.uniqid), courseKey(course.course_key) {}
+
+    // Helper methods
+    std::string getDisplayName() const {
+        return "Course " + std::to_string(courseId) + " (Semester " + std::to_string(courseSemester) + ")";
+    }
+
+    // Validate that all course fields are consistent
+    bool isValid() const {
+        // Check that courseKey matches expected format: {courseId}_s{semester}
+        std::string expectedKey = std::to_string(courseId) + "_s" + std::to_string(courseSemester);
+        return courseKey == expectedKey;
+    }
 };
 
 struct CourseInfo {

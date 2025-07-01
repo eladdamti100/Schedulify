@@ -64,12 +64,16 @@ private:
     static vector<Course> loadCoursesFromHistory(const vector<int>& fileIds);
     static vector<FileEntity> getFileHistory();
     static vector<string> validateCourses(const vector<Course>& courses);
-    static vector<InformativeSchedule> generateSchedules(const vector<Course>& userInput);
+    static vector<InformativeSchedule> generateSchedules(const vector<Course>& userInput, const string& semester);
     static void saveSchedule(const InformativeSchedule& infoSchedule, const string& path);
     static void printSchedule(const InformativeSchedule& infoSchedule);
     static bool deleteFileFromHistory(int fileId);
     static bool saveSchedulesToDB(const vector<InformativeSchedule>& schedules);
     static BotQueryResponse processClaudeQuery(const BotQueryRequest& request);
+
+    // Helpers
+    static string getFileExtension(const std::string& filename);
+    static int extractSemester(const string& path);
 
     static std::vector<int> lastFilteredScheduleIds;
     static vector<Course> lastGeneratedCourses;

@@ -8,15 +8,16 @@ class ScheduleGenerator : public QObject {
 Q_OBJECT
 
 public:
-    ScheduleGenerator(IModel* modelConn, const std::vector<Course>& courses, QObject* parent = nullptr);
+    ScheduleGenerator(IModel* modelConn, const vector<Course>& courses, const QString& semester, QObject* parent = nullptr);
 
 public slots:
     void generateSchedules();
 
 signals:
-    void schedulesGenerated(std::vector<InformativeSchedule>* schedules);
+    void schedulesGenerated(vector<InformativeSchedule>* schedules);
 
 private:
     IModel* modelConnection;
-    std::vector<Course> selectedCourses;
+    vector<Course> selectedCourses;
+    string currentSemester;
 };

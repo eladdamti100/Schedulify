@@ -1,6 +1,5 @@
 #include "excel_parser.h"
 
-// Constructor implementation
 ExcelCourseParser::ExcelCourseParser() {
     dayMap = {
             {"א", 1},
@@ -12,35 +11,280 @@ ExcelCourseParser::ExcelCourseParser() {
             {"ש", 7}
     };
 
-    sessionTypeMap = {
-            {"הרצאה",          SessionType::LECTURE},
-            {"תרגיל",          SessionType::TUTORIAL},
-            {"מעבדה",          SessionType::LAB},
-            {"ש.מחלקה",        SessionType::DEPARTMENTAL_SESSION},
-            {"תגבור",          SessionType::REINFORCEMENT},
-            {"הדרכה",          SessionType::GUIDANCE},
-            {"קולוקויום רשות", SessionType::OPTIONAL_COLLOQUIUM},
-            {"רישום",          SessionType::REGISTRATION},
-            {"תיזה",           SessionType::THESIS},
-            {"פרויקט",         SessionType::PROJECT}
-    };
+    initializeSessionTypeMap();
 }
 
-// Helper method to determine semester number from Hebrew period string
-int ExcelCourseParser::getSemesterNumber(const string& period) {
-    if (period == "סמסטר א'") {
-        return 1; // Semester A
-    } else if (period == "סמסטר ב'") {
-        return 2; // Semester B
-    } else if (period == "סמסטר קיץ") {
-        return 3; // Summer Semester
-    } else if (period == "שנתי") {
-        return 4; // Yearly course
+// Main parsing method
+
+vector<Course> ExcelCourseParser::parseExcelFile(const string& filename) {
+    vector<Course> courses;
+    map<string, Course> courseMap; // Key: courseKey (courseId_s{semester})
+    map<string, map<string, Group>> courseGroupMap; // Key: courseKey, Value: groupKey -> Group
+
+    stats = ParsingStats(); // Reset statistics
+
+    try {
+        XLDocument doc;
+        doc.open(filename);
+        auto worksheet = doc.workbook().worksheet(1);
+
+        for (uint32_t row = 2; row <= 10000; ++row) {
+            stats.totalRows++;
+
+            auto firstCell = worksheet.cell(row, 1);
+            if (firstCell.value().type() == XLValueType::Empty) {
+                break;
+            }
+
+            vector<string> rowData;
+            for (uint32_t col = 1; col <= 10; ++col) {
+                auto cell = worksheet.cell(row, col);
+                string cellValue;
+                try {
+                    if (cell.value().type() != XLValueType::Empty) {
+                        cellValue = cell.value().get<string>();
+                    } else {
+                        cellValue = "";
+                    }
+                } catch (...) {
+                    cellValue = "";
+                }
+                rowData.push_back(cellValue);
+            }
+
+            while (rowData.size() < 10) {
+                rowData.push_back("");
+            }
+
+            string period = rowData[0];
+            string fullCode = rowData[1];
+            string courseName = rowData[2];
+            string sessionType = rowData[3];
+            string timeSlot = rowData[4];
+            string creditPoints = rowData[5];
+            string hours = rowData[6];
+            string teachers = rowData[7];
+            string room = rowData[8];
+            string notes = rowData[9];
+
+            // Enhanced semester parsing
+            int semesterNumber = getSemesterNumber(period);
+            if (!isValidSemester(semesterNumber)) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": Invalid semester - " + period);
+                continue;
+            }
+
+            auto [courseCode, groupCode] = parseCourseCode(fullCode);
+            if (courseCode.empty() || courseCode.length() != 5) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": Invalid course code - " + fullCode);
+                continue;
+            }
+
+            SessionType normalizedSessionType = getSessionType(sessionType);
+            if (normalizedSessionType == SessionType::UNSUPPORTED) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": Unsupported session type - " + sessionType);
+                continue;
+            }
+
+            // Enhanced session type name mapping
+            string normalizedSessionTypeName = sessionTypeToString(normalizedSessionType);
+
+            if (timeSlot.empty() || timeSlot.find("'") == string::npos) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": Invalid time slot - " + timeSlot);
+                continue;
+            }
+
+            vector<Session> sessions = parseMultipleSessions(timeSlot, room, teachers);
+
+            bool hasValidSessions = false;
+            for (const Session &session : sessions) {
+                if (session.day_of_week > 0 && !session.start_time.empty() && !session.end_time.empty()) {
+                    hasValidSessions = true;
+                    break;
+                }
+            }
+
+            if (!hasValidSessions) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": No valid sessions found");
+                continue;
+            }
+
+            // Create course key with semester
+            int courseId = 0;
+            try {
+                courseId = stoi(courseCode);
+            } catch (...) {
+                stats.skippedRows++;
+                parsingWarnings.push_back("Row " + to_string(row) + ": Invalid course ID - " + courseCode);
+                continue;
+            }
+
+            string courseKey = to_string(courseId) + "_s" + to_string(semesterNumber);
+
+            // Initialize course if not exists
+            if (courseMap.find(courseKey) == courseMap.end()) {
+                Course newCourse;
+                initializeCourse(newCourse, courseId, courseCode, courseName, teachers, semesterNumber);
+                courseMap[courseKey] = newCourse;
+                stats.coursesBySemester[semesterNumber]++;
+            }
+
+            // Track session type statistics
+            stats.sessionTypesCounted[normalizedSessionTypeName]++;
+
+            // Group key for this specific course-semester combination
+            string groupKey = fullCode + "_" + normalizedSessionTypeName;
+
+            if (courseGroupMap[courseKey].find(groupKey) == courseGroupMap[courseKey].end()) {
+                Group newGroup;
+                newGroup.type = normalizedSessionType;
+                courseGroupMap[courseKey][groupKey] = newGroup;
+            }
+
+            for (const Session &session : sessions) {
+                if (session.day_of_week > 0 && !session.start_time.empty() && !session.end_time.empty()) {
+                    courseGroupMap[courseKey][groupKey].sessions.push_back(session);
+                }
+            }
+        }
+
+        // Create final courses list with enhanced group assignment
+        for (auto &[courseKey, course] : courseMap) {
+            for (auto &[groupKey, group] : courseGroupMap[courseKey]) {
+                if (group.sessions.empty()) continue;
+
+                // Enhanced group type assignment
+                switch (group.type) {
+                    case SessionType::LECTURE:
+                        course.Lectures.push_back(group);
+                        break;
+                    case SessionType::TUTORIAL:
+                        course.Tirgulim.push_back(group);
+                        break;
+                    case SessionType::LAB:
+                        course.labs.push_back(group);
+                        break;
+                    case SessionType::BLOCK:
+                        course.blocks.push_back(group);
+                        break;
+                    case SessionType::DEPARTMENTAL_SESSION:
+                        course.DepartmentalSessions.push_back(group);
+                        break;
+                    case SessionType::REINFORCEMENT:
+                        course.Reinforcements.push_back(group);
+                        break;
+                    case SessionType::GUIDANCE:
+                        course.Guidance.push_back(group);
+                        break;
+                    case SessionType::OPTIONAL_COLLOQUIUM:
+                        course.OptionalColloquium.push_back(group);
+                        break;
+                    case SessionType::REGISTRATION:
+                        course.Registration.push_back(group);
+                        break;
+                    case SessionType::THESIS:
+                        course.Thesis.push_back(group);
+                        break;
+                    case SessionType::PROJECT:
+                        course.Project.push_back(group);
+                        break;
+                    case SessionType::UNSUPPORTED:
+                        break;
+                }
+            }
+
+            // Validate course before adding
+            if (validateParsedCourse(course)) {
+                courses.push_back(course);
+                stats.validCourses++;
+            } else {
+                parsingWarnings.push_back("Course validation failed for: " + course.name + " (" + courseKey + ")");
+            }
+        }
+
+        doc.close();
+
+    } catch (const std::exception& e) {
+        parsingWarnings.push_back("Excel parsing error: " + string(e.what()));
+        std::cerr << "Failed to parse Excel file: " << e.what() << std::endl;
     }
-    return 0; // Unknown/unsupported semester
+
+    return courses;
 }
 
-// Parse multiple rooms from single cell - handles both newlines and space-separated rooms
+// Course creation and management
+
+void ExcelCourseParser::initializeCourse(Course& course, int courseId, const string& rawId,
+                                         const string& courseName, const string& teacherName, int semester) {
+    course.id = courseId;
+    course.raw_id = rawId;
+    course.name = courseName;
+    course.teacher = teacherName;
+    course.semester = semester;
+
+    // Generate course_key immediately
+    course.generateCourseKey();
+}
+
+// Course validation
+
+bool ExcelCourseParser::validateParsedCourse(const Course& course) {
+    // Check basic fields
+    if (course.id <= 0 || course.raw_id.empty() || course.name.empty()) {
+        return false;
+    }
+
+    // Check semester validity
+    if (!course.hasValidSemester()) {
+        return false;
+    }
+
+    // Check course_key format
+    string expectedKey = to_string(course.id) + "_s" + to_string(course.semester);
+    if (course.course_key != expectedKey) {
+        return false;
+    }
+
+    // Check that course has at least one group with sessions
+    bool hasValidGroups = false;
+    vector<vector<Group>*> allGroups = {
+            const_cast<vector<Group>*>(&course.Lectures),
+            const_cast<vector<Group>*>(&course.Tirgulim),
+            const_cast<vector<Group>*>(&course.labs),
+            const_cast<vector<Group>*>(&course.blocks),
+            const_cast<vector<Group>*>(&course.DepartmentalSessions),
+            const_cast<vector<Group>*>(&course.Reinforcements),
+            const_cast<vector<Group>*>(&course.Guidance),
+            const_cast<vector<Group>*>(&course.OptionalColloquium),
+            const_cast<vector<Group>*>(&course.Registration),
+            const_cast<vector<Group>*>(&course.Thesis),
+            const_cast<vector<Group>*>(&course.Project)
+    };
+
+    for (auto* groupVec : allGroups) {
+        for (const auto& group : *groupVec) {
+            if (!group.sessions.empty()) {
+                hasValidGroups = true;
+                break;
+            }
+        }
+        if (hasValidGroups) break;
+    }
+
+    return hasValidGroups;
+}
+
+vector<string> ExcelCourseParser::getParsingWarnings() const {
+    return parsingWarnings;
+}
+
+// Parsing helper methods
+
 vector<string> ExcelCourseParser::parseMultipleRooms(const string& roomStr) {
     vector<string> rooms;
 
@@ -132,7 +376,6 @@ vector<string> ExcelCourseParser::parseMultipleRooms(const string& roomStr) {
     return rooms;
 }
 
-// Parse multiple time slots and match each with corresponding room
 vector<Session> ExcelCourseParser::parseMultipleSessions(const string& timeSlotStr, const string& roomStr, const string& teacher) {
     vector<Session> sessions;
 
@@ -273,11 +516,101 @@ Session ExcelCourseParser::parseSingleSession(const string& timeSlotStr, const s
     return session;
 }
 
+void ExcelCourseParser::initializeSessionTypeMap() {
+    sessionTypeMap = {
+            {"הרצאה",          SessionType::LECTURE},
+            {"תרגיל",          SessionType::TUTORIAL},
+            {"מעבדה",          SessionType::LAB},
+            {"ש.מחלקה",        SessionType::DEPARTMENTAL_SESSION},
+            {"תגבור",          SessionType::REINFORCEMENT},
+            {"הדרכה",          SessionType::GUIDANCE},
+            {"קולוקויום רשות", SessionType::OPTIONAL_COLLOQUIUM},
+            {"רישום",          SessionType::REGISTRATION},
+            {"תיזה",           SessionType::THESIS},
+            {"פרויקט",         SessionType::PROJECT},
+            {"בלוק",           SessionType::BLOCK}  // Added block support
+    };
+}
+
 SessionType ExcelCourseParser::getSessionType(const string& hebrewType) {
     if (sessionTypeMap.count(hebrewType)) {
         return sessionTypeMap[hebrewType];
     }
     return SessionType::LECTURE;
+}
+
+bool ExcelCourseParser::isValidSessionType(const string& sessionType) {
+    return sessionTypeMap.find(sessionType) != sessionTypeMap.end();
+}
+
+string ExcelCourseParser::sessionTypeToString(SessionType type) {
+    switch (type) {
+        case SessionType::LECTURE: return "lecture";
+        case SessionType::TUTORIAL: return "tutorial";
+        case SessionType::LAB: return "lab";
+        case SessionType::BLOCK: return "block";
+        case SessionType::DEPARTMENTAL_SESSION: return "departmental_session";
+        case SessionType::REINFORCEMENT: return "reinforcement";
+        case SessionType::GUIDANCE: return "guidance";
+        case SessionType::OPTIONAL_COLLOQUIUM: return "optional_colloquium";
+        case SessionType::REGISTRATION: return "registration";
+        case SessionType::THESIS: return "thesis";
+        case SessionType::PROJECT: return "project";
+        case SessionType::UNSUPPORTED: return "unsupported";
+        default: return "unsupported";
+    }
+}
+
+int ExcelCourseParser::getSemesterNumber(const string& period) {
+    // Trim whitespace and convert to lowercase for comparison
+    string trimmedPeriod = period;
+    trimmedPeriod.erase(0, trimmedPeriod.find_first_not_of(" \t\r\n"));
+    trimmedPeriod.erase(trimmedPeriod.find_last_not_of(" \t\r\n") + 1);
+
+    // Hebrew semester parsing
+    if (trimmedPeriod == "סמסטר א'" || trimmedPeriod == "סמסטר א" ||
+        trimmedPeriod.find("סמסטר א") != string::npos) {
+        return 1; // Semester A
+    } else if (trimmedPeriod == "סמסטר ב'" || trimmedPeriod == "סמסטר ב" ||
+               trimmedPeriod.find("סמסטר ב") != string::npos) {
+        return 2; // Semester B
+    } else if (trimmedPeriod == "סמסטר קיץ" || trimmedPeriod == "קיץ" ||
+               trimmedPeriod.find("קיץ") != string::npos) {
+        return 3; // Summer Semester
+    } else if (trimmedPeriod == "שנתי" || trimmedPeriod.find("שנתי") != string::npos) {
+        return 4; // Yearly course
+    }
+
+    // English fallbacks
+    string lowerPeriod = trimmedPeriod;
+    transform(lowerPeriod.begin(), lowerPeriod.end(), lowerPeriod.begin(), ::tolower);
+
+    if (lowerPeriod.find("semester a") != string::npos || lowerPeriod.find("fall") != string::npos) {
+        return 1;
+    } else if (lowerPeriod.find("semester b") != string::npos || lowerPeriod.find("spring") != string::npos) {
+        return 2;
+    } else if (lowerPeriod.find("summer") != string::npos) {
+        return 3;
+    } else if (lowerPeriod.find("yearly") != string::npos || lowerPeriod.find("annual") != string::npos) {
+        return 4;
+    }
+
+    parsingWarnings.push_back("Unknown semester format: " + period + " - defaulting to Semester A");
+    return 1; // Default to Semester A if unknown
+}
+
+string ExcelCourseParser::getSemesterName(int semesterNumber) {
+    switch (semesterNumber) {
+        case 1: return "Semester A";
+        case 2: return "Semester B";
+        case 3: return "Summer";
+        case 4: return "Year-long";
+        default: return "Unknown";
+    }
+}
+
+bool ExcelCourseParser::isValidSemester(int semesterNumber) {
+    return semesterNumber >= 1 && semesterNumber <= 4;
 }
 
 pair<string, string> ExcelCourseParser::parseCourseCode(const string& fullCode) {
@@ -311,213 +644,7 @@ pair<string, string> ExcelCourseParser::parseCourseCode(const string& fullCode) 
     return {fullCode, "01"};
 }
 
-vector<Course> ExcelCourseParser::parseExcelFile(const string& filename) {
-    vector<Course> courses;
-    // Use courseCode + semester as key to create separate courses
-    map<string, Course> courseMap; // Key: courseCode_semester
-    map<string, map<string, Group>> courseGroupMap; // Key: courseCode_semester
-
-    try {
-        XLDocument doc;
-        doc.open(filename);
-        auto worksheet = doc.workbook().worksheet(1);
-
-        for (uint32_t row = 2; row <= 10000; ++row) {
-            auto firstCell = worksheet.cell(row, 1);
-            if (firstCell.value().type() == XLValueType::Empty) {
-                break;
-            }
-
-            vector<string> rowData;
-            for (uint32_t col = 1; col <= 10; ++col) {
-                auto cell = worksheet.cell(row, col);
-                string cellValue;
-                try {
-                    if (cell.value().type() != XLValueType::Empty) {
-                        cellValue = cell.value().get<string>();
-                    } else {
-                        cellValue = "";
-                    }
-                } catch (...) {
-                    cellValue = "";
-                }
-                rowData.push_back(cellValue);
-            }
-
-            while (rowData.size() < 10) {
-                rowData.push_back("");
-            }
-
-            string period = rowData[0];
-            string fullCode = rowData[1];
-            string courseName = rowData[2];
-            string sessionType = rowData[3];
-            string timeSlot = rowData[4];
-            string creditPoints = rowData[5];
-            string hours = rowData[6];
-            string teachers = rowData[7];
-            string room = rowData[8];
-            string notes = rowData[9];
-
-            // Get semester number and filter for supported semesters
-            int semesterNumber = getSemesterNumber(period);
-            if (semesterNumber == 0) {
-                continue; // Skip unsupported semester types
-            }
-
-            auto [courseCode, groupCode] = parseCourseCode(fullCode);
-            if (courseCode.empty()) continue;
-
-            SessionType normalizedSessionType = getSessionType(sessionType);
-            if (normalizedSessionType == SessionType::UNSUPPORTED) {
-                continue;
-            }
-
-            string normalizedSessionTypeName;
-            switch (normalizedSessionType) {
-                case SessionType::LECTURE:
-                    normalizedSessionTypeName = "lecture";
-                    break;
-                case SessionType::TUTORIAL:
-                    normalizedSessionTypeName = "tutorial";
-                    break;
-                case SessionType::LAB:
-                    normalizedSessionTypeName = "lab";
-                    break;
-                case SessionType::BLOCK:
-                    normalizedSessionTypeName = "block";
-                    break;
-                case SessionType::DEPARTMENTAL_SESSION:
-                    normalizedSessionTypeName = "departmental_session";
-                    break;
-                case SessionType::REINFORCEMENT:
-                    normalizedSessionTypeName = "reinforcement";
-                    break;
-                case SessionType::GUIDANCE:
-                    normalizedSessionTypeName = "guidance";
-                    break;
-                case SessionType::OPTIONAL_COLLOQUIUM:
-                    normalizedSessionTypeName = "optional_colloquium";
-                    break;
-                case SessionType::REGISTRATION:
-                    normalizedSessionTypeName = "registration";
-                    break;
-                case SessionType::THESIS:
-                    normalizedSessionTypeName = "thesis";
-                    break;
-                case SessionType::PROJECT:
-                    normalizedSessionTypeName = "project";
-                    break;
-                case SessionType::UNSUPPORTED:
-                    normalizedSessionTypeName = "unsupported";
-                    break;
-            }
-
-            if (timeSlot.empty() || timeSlot.find("'") == string::npos) {
-                continue; // Skip rows without valid time slots
-            }
-
-            vector<Session> sessions = parseMultipleSessions(timeSlot, room, teachers);
-
-            bool hasValidSessions = false;
-            for (const Session &session : sessions) {
-                if (session.day_of_week > 0 && !session.start_time.empty() && !session.end_time.empty()) {
-                    hasValidSessions = true;
-                    break;
-                }
-            }
-
-            if (!hasValidSessions) {
-                continue;
-            }
-
-            // Create unique course key: courseCode + semester
-            string courseKey = courseCode + "_sem" + to_string(semesterNumber);
-
-            if (courseMap.find(courseKey) == courseMap.end()) {
-                Course newCourse;
-                try {
-                    newCourse.id = stoi(courseCode);
-                } catch (...) {
-                    newCourse.id = 0;
-                }
-                newCourse.raw_id = courseCode;
-                newCourse.name = courseName;
-                newCourse.teacher = teachers;
-                newCourse.semester = semesterNumber; // Each course gets its specific semester
-                courseMap[courseKey] = newCourse;
-            }
-
-            // Group key for this specific course-semester combination
-            string groupKey = fullCode + "_" + normalizedSessionTypeName;
-
-            if (courseGroupMap[courseKey].find(groupKey) == courseGroupMap[courseKey].end()) {
-                Group newGroup;
-                newGroup.type = normalizedSessionType;
-                courseGroupMap[courseKey][groupKey] = newGroup;
-            }
-
-            for (const Session &session : sessions) {
-                if (session.day_of_week > 0 && !session.start_time.empty() && !session.end_time.empty()) {
-                    courseGroupMap[courseKey][groupKey].sessions.push_back(session);
-                }
-            }
-        }
-
-        // Create final courses list
-        for (auto &[courseKey, course] : courseMap) {
-            for (auto &[groupKey, group] : courseGroupMap[courseKey]) {
-                if (group.sessions.empty()) continue;
-
-                switch (group.type) {
-                    case SessionType::LECTURE:
-                        course.Lectures.push_back(group);
-                        break;
-                    case SessionType::TUTORIAL:
-                        course.Tirgulim.push_back(group);
-                        break;
-                    case SessionType::LAB:
-                        course.labs.push_back(group);
-                        break;
-                    case SessionType::BLOCK:
-                        course.blocks.push_back(group);
-                        break;
-                    case SessionType::DEPARTMENTAL_SESSION:
-                        course.DepartmentalSessions.push_back(group);
-                        break;
-                    case SessionType::REINFORCEMENT:
-                        course.Reinforcements.push_back(group);
-                        break;
-                    case SessionType::GUIDANCE:
-                        course.Guidance.push_back(group);
-                        break;
-                    case SessionType::OPTIONAL_COLLOQUIUM:
-                        course.OptionalColloquium.push_back(group);
-                        break;
-                    case SessionType::REGISTRATION:
-                        course.Registration.push_back(group);
-                        break;
-                    case SessionType::THESIS:
-                        course.Thesis.push_back(group);
-                        break;
-                    case SessionType::PROJECT:
-                        course.Project.push_back(group);
-                        break;
-                    case SessionType::UNSUPPORTED:
-                        break;
-                }
-            }
-
-            courses.push_back(course);
-        }
-
-        doc.close();
-    } catch (const std::exception& e) {
-        std::cerr << "Failed to parse Excel file: " << e.what() << std::endl;
-    }
-
-    return courses;
-}
+// Utility functions to translate hebrew
 
 string getDayName(int dayOfWeek) {
     switch(dayOfWeek) {
@@ -529,5 +656,31 @@ string getDayName(int dayOfWeek) {
         case 6: return "שישי";
         case 7: return "שבת";
         default: return "לא ידוע";
+    }
+}
+
+namespace SemesterUtils {
+    string getHebrewSemesterName(int semester) {
+        switch (semester) {
+            case 1: return "סמסטר א'";
+            case 2: return "סמסטר ב'";
+            case 3: return "סמסטר קיץ";
+            case 4: return "שנתי";
+            default: return "לא ידוע";
+        }
+    }
+
+    string getEnglishSemesterName(int semester) {
+        switch (semester) {
+            case 1: return "Semester A";
+            case 2: return "Semester B";
+            case 3: return "Summer";
+            case 4: return "Year-long";
+            default: return "Unknown";
+        }
+    }
+
+    bool isValidAcademicSemester(int semester) {
+        return semester >= 1 && semester <= 4;
     }
 }

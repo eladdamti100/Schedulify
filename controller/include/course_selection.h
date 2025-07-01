@@ -54,29 +54,37 @@ public:
 
     void initiateCoursesData(const vector<Course>& courses);
 
+    // Courses clicking support
     Q_INVOKABLE bool isCourseSelected(int index);
-    Q_INVOKABLE void addBlockTimeToSemester(const QString& day, const QString& startTime,
-                                            const QString& endTime, const QString& semester);
     Q_INVOKABLE void toggleCourseSelection(int index);
-    Q_INVOKABLE void filterCourses(const QString &text);
-    Q_INVOKABLE void resetFilter();
-    Q_INVOKABLE void generateSchedules();
     Q_INVOKABLE void deselectCourse(int index);
+
+    // Add new course
     Q_INVOKABLE void createNewCourse(const QString& courseName, const QString& courseId,
                                      const QString& teacherName, int semester, const QVariantList& sessionGroups);
 
-    // Semester filtering functionality
+    // Add new Blocks
+    Q_INVOKABLE void addBlockTimeToSemester(const QString& day, const QString& startTime,
+                                            const QString& endTime, const QString& semester);
+    Q_INVOKABLE void addBlockTime(const QString& day, const QString& startTime, const QString& endTime);
+    Q_INVOKABLE void removeBlockTime(int index);
+    Q_INVOKABLE void clearAllBlockTimes();
+
+    // Filter courses (search and semester)
     Q_INVOKABLE void filterBySemester(const QString& semester);
+    Q_INVOKABLE void filterCourses(const QString &text);
+    Q_INVOKABLE void resetFilter();
+
+    Q_INVOKABLE void generateSchedules();
 
     // Semester-specific utilities
     Q_INVOKABLE QString getCourseSemester(int courseIndex);
     Q_INVOKABLE bool canAddCourseToSemester(int courseIndex);
 
-    Q_INVOKABLE void addBlockTime(const QString& day, const QString& startTime, const QString& endTime);
-    Q_INVOKABLE void removeBlockTime(int index);
-    Q_INVOKABLE void clearAllBlockTimes();
-
+    // Validate courses
     Q_INVOKABLE void setupValidationTimeout(int timeoutMs);
+
+    // Get selected courses
     Q_INVOKABLE int getSelectedCoursesCountForSemester(const QString& semester);
     Q_INVOKABLE QVariantList getSelectedCoursesForSemester(const QString& semester);
 
@@ -131,15 +139,19 @@ private:
     QThread* workerThread = nullptr;
 
     // Semester-specific helper methods
+
+    // Handle selected semester filter
     void updateSelectedCoursesModel();
     void generateSemesterSchedules(const QString& semester);
     void checkAndNavigateToSchedules();
 
-    void updateBlockTimesModel();
-    Course createSingleBlockTimeCourse();
-    static int getDayNumber(const QString& dayName);
+
+    // Create new course handling
     Course createCourseFromData(const QString& courseName, const QString& courseId,
                                 const QString& teacherName, const QVariantList& sessionGroups);
+    static int getDayNumber(const QString& dayName);
+
+    // Validate courses logic
     void validateCourses(const vector<Course>& courses, int timeoutMs);
     void onCoursesValidated(vector<string>* errors);
     void cleanupValidation();
@@ -152,13 +164,13 @@ private:
     bool matchesSemesterFilter(const Course& course) const;
     bool matchesSearchFilter(const Course& course, const QString& searchText) const;
 
-    // Per-semester block time handling
+    // Block time handling
+    void updateBlockTimesModel();
+    Course createSingleBlockTimeCourse();
     vector<BlockTime> getBlockTimesForCurrentSemester(const QString& semester);
     Course createSingleBlockTimeCourseForSemester(const vector<BlockTime>& semesterBlockTimes, const QString& semester);
 
     inline static const int VALIDATION_TIMEOUT_MS = 60000;
-    inline static const int THREAD_CLEANUP_TIMEOUT_MS = 10000;
-    inline static const int MAX_COURSES_LIMIT = 1000;
 };
 
 #endif //COURSE_SELECTION_H

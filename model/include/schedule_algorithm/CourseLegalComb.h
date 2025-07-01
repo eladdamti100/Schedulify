@@ -25,15 +25,16 @@ private:
             int currentTypeIndex,
             vector<const Group*>& currentCombination,
             vector<CourseSelection>& combinations,
-            int courseId);
+            const Course& course);
 
     // Helper method to check if any groups in the combination have conflicts
     bool hasAnyCombinationConflict(const vector<const Group*>& groups);
 
-    // Helper method to create CourseSelection from the selected groups
+    // Helper method to create CourseSelection from the selected groups - updated for new course fields
     CourseSelection createCourseSelection(
             const vector<const Group*>& selectedGroups,
             const vector<pair<string, vector<const Group*>>>& availableGroupTypes,
-            int courseId);
+            const Course& course);
 };
+
 #endif // COURSE_LEGAL_COMB_H

@@ -125,7 +125,7 @@ set(PROJECT_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/model_db_integration.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_schema.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_files.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_course.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_courses.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_schedules.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/ScheduleDatabaseWriter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/model/src/db/db_json_helpers.cpp
