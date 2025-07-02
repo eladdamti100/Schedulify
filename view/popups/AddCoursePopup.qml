@@ -80,10 +80,8 @@ Popup {
         }
     }
 
-    // FIXED: Use proper anchoring instead of overlapping Column
     Item {
         anchors.fill: parent
-        anchors.margins: 24
 
         // Header
         Item {
@@ -176,7 +174,7 @@ Popup {
                 left: parent.left
                 right: parent.right
             }
-            height: 280 // Fixed height
+            height: 330
             color: "#f8fafc"
             radius: 12
             border.width: 1
@@ -416,7 +414,7 @@ Popup {
             id: sessionGroupsHeader
             anchors {
                 top: courseInfoSection.bottom
-                topMargin: 30
+                topMargin: 15
                 left: parent.left
                 right: parent.right
             }
@@ -489,7 +487,7 @@ Popup {
             }
         }
 
-        // FIXED: Session Groups ScrollView with proper anchoring
+        // Session Groups ScrollView with proper anchoring
         ScrollView {
             id: groupsScrollView
             anchors {
@@ -561,16 +559,33 @@ Popup {
 
                                     ComboBox {
                                         id: groupTypeCombo
-                                        Layout.preferredWidth: 120
-                                        model: ["Lecture", "Tutorial", "Lab"]
+                                        Layout.preferredWidth: 160
+                                        // Updated model with all new group types
+                                        model: [
+                                            "Lecture",
+                                            "Tutorial",
+                                            "Lab",
+                                            "Departmental Session",
+                                            "Reinforcement",
+                                            "Guidance",
+                                            "Optional Colloquium",
+                                            "Registration",
+                                            "Thesis",
+                                            "Project"
+                                        ]
                                         currentIndex: {
                                             switch (groupType) {
-                                                case "Tutorial":
-                                                    return 1
-                                                case "Lab":
-                                                    return 2
-                                                default:
-                                                    return 0
+                                                case "Tutorial": return 1
+                                                case "Lab": return 2
+                                                case "Block": return 3
+                                                case "Departmental Session": return 4
+                                                case "Reinforcement": return 5
+                                                case "Guidance": return 6
+                                                case "Optional Colloquium": return 7
+                                                case "Registration": return 8
+                                                case "Thesis": return 9
+                                                case "Project": return 10
+                                                default: return 0
                                             }
                                         }
 
@@ -583,11 +598,31 @@ Popup {
 
                                         contentItem: Text {
                                             text: parent.currentText
-                                            font.pixelSize: 14
+                                            font.pixelSize: 13
                                             font.bold: true
                                             color: "#1e293b"
                                             leftPadding: 12
                                             verticalAlignment: Text.AlignVCenter
+                                            elide: Text.ElideRight
+                                        }
+
+                                        delegate: ItemDelegate {
+                                            width: groupTypeCombo.width
+                                            height: 35
+
+                                            background: Rectangle {
+                                                color: parent.hovered ? "#f3f4f6" : "#ffffff"
+                                                radius: 4
+                                            }
+
+                                            contentItem: Text {
+                                                text: modelData
+                                                font.pixelSize: 13
+                                                color: "#1f2937"
+                                                leftPadding: 12
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
                                         }
 
                                         onCurrentTextChanged: {
@@ -1066,7 +1101,7 @@ Popup {
             }
         }
 
-        // FIXED: Action Buttons with proper anchoring
+        // Action Buttons with proper anchoring
         Item {
             id: actionButtonsSection
             anchors {
@@ -1161,7 +1196,6 @@ Popup {
                                 return;
                             }
 
-                            // Validate that course ID is a number
                             if (isNaN(parseInt(courseIdField.text))) {
                                 showError("Course ID must be a valid number")
                                 return;
@@ -1178,16 +1212,11 @@ Popup {
 
                             // Collect session groups data and validate building/room fields
                             var sessionGroups = [];
-                            var hasLecture = false;
+                            var hasGroupWithSessions = false;
 
                             // Iterate through all groups in the repeater
                             for (var groupIndex = 0; groupIndex < groupsModel.count; groupIndex++) {
                                 var groupItem = groupsModel.get(groupIndex);
-
-                                // Check if this group is a lecture
-                                if (groupItem.groupType === "Lecture") {
-                                    hasLecture = true;
-                                }
 
                                 // Get the corresponding group delegate
                                 var groupDelegate = groupsRepeater.itemAt(groupIndex);
@@ -1214,10 +1243,6 @@ Popup {
                                 var comboBoxType = findComboBox(groupDelegate);
                                 if (comboBoxType) {
                                     actualGroupType = comboBoxType;
-                                    // Update hasLecture check with actual type
-                                    if (actualGroupType === "Lecture") {
-                                        hasLecture = true;
-                                    }
                                 }
 
                                 // Access the sessionsModel through the delegate's children
@@ -1277,6 +1302,11 @@ Popup {
                                     groupSessions.push(session);
                                 }
 
+                                // If this group has sessions, mark that we have at least one group with sessions
+                                if (groupSessions.length > 0) {
+                                    hasGroupWithSessions = true;
+                                }
+
                                 var groupData = {
                                     type: actualGroupType,
                                     sessions: groupSessions
@@ -1285,9 +1315,9 @@ Popup {
                                 sessionGroups.push(groupData);
                             }
 
-                            // Validate that course has at least one lecture group
-                            if (!hasLecture) {
-                                showError("A course must have at least one Lecture group")
+                            // Validate that course has at least one group with at least one session
+                            if (!hasGroupWithSessions) {
+                                showError("A course must have at least one group with at least one session")
                                 return;
                             }
 

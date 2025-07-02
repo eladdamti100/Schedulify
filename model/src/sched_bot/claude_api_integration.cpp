@@ -65,7 +65,7 @@ BotQueryResponse ClaudeAPIClient::ActivateBot(const BotQueryRequest& request) {
                 return response;
             }
 
-            // UPDATED: Ensure query returns unique_id and add semester filtering
+            // Ensure query returns unique_id and add semester filtering
             string semesterFilteredQuery = response.sqlQuery;
 
             // Replace schedule_index with unique_id if needed
@@ -92,7 +92,7 @@ BotQueryResponse ClaudeAPIClient::ActivateBot(const BotQueryRequest& request) {
             Logger::get().logInfo("Executing semester-filtered query: " + semesterFilteredQuery);
             Logger::get().logInfo("Parameters: " + std::to_string(enhancedParameters.size()) + " total, last one is semester: " + request.semester);
 
-            // NEW: Execute query to get unique_ids directly
+            // Execute query to get unique_ids directly
             vector<string> matchingUniqueIds = db.schedules()->executeCustomQueryForUniqueIds(semesterFilteredQuery, enhancedParameters);
 
             // Convert available schedule IDs to unique IDs for filtering
