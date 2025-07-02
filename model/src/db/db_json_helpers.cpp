@@ -6,13 +6,21 @@ string DatabaseJsonHelpers::groupsToJson(const vector<Group>& groups) {
     for (const auto& group : groups) {
         QJsonObject groupObj;
 
-        // Convert SessionType to string
+        // Convert SessionType to string - ENHANCED with all types
         QString typeStr;
         switch (group.type) {
             case SessionType::LECTURE: typeStr = "LECTURE"; break;
             case SessionType::TUTORIAL: typeStr = "TUTORIAL"; break;
             case SessionType::LAB: typeStr = "LAB"; break;
             case SessionType::BLOCK: typeStr = "BLOCK"; break;
+            case SessionType::DEPARTMENTAL_SESSION: typeStr = "DEPARTMENTAL_SESSION"; break;
+            case SessionType::REINFORCEMENT: typeStr = "REINFORCEMENT"; break;
+            case SessionType::GUIDANCE: typeStr = "GUIDANCE"; break;
+            case SessionType::OPTIONAL_COLLOQUIUM: typeStr = "OPTIONAL_COLLOQUIUM"; break;
+            case SessionType::REGISTRATION: typeStr = "REGISTRATION"; break;
+            case SessionType::THESIS: typeStr = "THESIS"; break;
+            case SessionType::PROJECT: typeStr = "PROJECT"; break;
+            case SessionType::UNSUPPORTED:
             default: typeStr = "UNSUPPORTED"; break;
         }
         groupObj["type"] = typeStr;
@@ -49,12 +57,19 @@ vector<Group> DatabaseJsonHelpers::groupsFromJson(const string& json) {
         QJsonObject groupObj = value.toObject();
         Group group;
 
-        // Convert string to SessionType
+        // Convert string to SessionType - ENHANCED with all types
         QString typeStr = groupObj["type"].toString();
         if (typeStr == "LECTURE") group.type = SessionType::LECTURE;
         else if (typeStr == "TUTORIAL") group.type = SessionType::TUTORIAL;
         else if (typeStr == "LAB") group.type = SessionType::LAB;
         else if (typeStr == "BLOCK") group.type = SessionType::BLOCK;
+        else if (typeStr == "DEPARTMENTAL_SESSION") group.type = SessionType::DEPARTMENTAL_SESSION;
+        else if (typeStr == "REINFORCEMENT") group.type = SessionType::REINFORCEMENT;
+        else if (typeStr == "GUIDANCE") group.type = SessionType::GUIDANCE;
+        else if (typeStr == "OPTIONAL_COLLOQUIUM") group.type = SessionType::OPTIONAL_COLLOQUIUM;
+        else if (typeStr == "REGISTRATION") group.type = SessionType::REGISTRATION;
+        else if (typeStr == "THESIS") group.type = SessionType::THESIS;
+        else if (typeStr == "PROJECT") group.type = SessionType::PROJECT;
         else group.type = SessionType::UNSUPPORTED;
 
         QJsonArray sessionsArray = groupObj["sessions"].toArray();

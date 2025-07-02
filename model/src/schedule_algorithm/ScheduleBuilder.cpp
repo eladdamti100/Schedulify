@@ -1,4 +1,3 @@
-#include <random>
 #include "ScheduleBuilder.h"
 
 using namespace std;
@@ -188,6 +187,30 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
 
             if (selection.departmentalGroup) {
                 processGroupSessions(selection, selection.departmentalGroup, "Departmental", daySchedules);
+            }
+
+            if (selection.reinforcementGroup) {
+                processGroupSessions(selection, selection.reinforcementGroup, "Reinforcement", daySchedules);
+            }
+
+            if (selection.guidanceGroup) {
+                processGroupSessions(selection, selection.guidanceGroup, "Guidance", daySchedules);
+            }
+
+            if (selection.colloquiumGroup) {
+                processGroupSessions(selection, selection.colloquiumGroup, "Colloquium", daySchedules);
+            }
+
+            if (selection.registrationGroup) {
+                processGroupSessions(selection, selection.registrationGroup, "Registration", daySchedules);
+            }
+
+            if (selection.thesisGroup) {
+                processGroupSessions(selection, selection.thesisGroup, "Thesis", daySchedules);
+            }
+
+            if (selection.projectGroup) {
+                processGroupSessions(selection, selection.projectGroup, "Project", daySchedules);
             }
         }
 

@@ -132,6 +132,13 @@ bool DatabaseSchema::createCourseTable() {
             tutorials_json TEXT DEFAULT '[]',
             labs_json TEXT DEFAULT '[]',
             blocks_json TEXT DEFAULT '[]',
+            departmental_sessions_json TEXT DEFAULT '[]',
+            reinforcements_json TEXT DEFAULT '[]',
+            guidance_json TEXT DEFAULT '[]',
+            optional_colloquium_json TEXT DEFAULT '[]',
+            registration_json TEXT DEFAULT '[]',
+            thesis_json TEXT DEFAULT '[]',
+            project_json TEXT DEFAULT '[]',
             file_id INTEGER NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -145,7 +152,7 @@ bool DatabaseSchema::createCourseTable() {
         return false;
     }
 
-    Logger::get().logInfo("Course table created successfully");
+    Logger::get().logInfo("Course table created successfully with all session types");
     return true;
 }
 

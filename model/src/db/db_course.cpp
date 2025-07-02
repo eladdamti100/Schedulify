@@ -17,8 +17,12 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
     QSqlQuery query(db);
     query.prepare(R"(
         INSERT OR IGNORE INTO course
-        (course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        (course_file_id, raw_id, name, teacher, semester,
+         lectures_json, tutorials_json, labs_json, blocks_json,
+         departmental_sessions_json, reinforcements_json, guidance_json,
+         optional_colloquium_json, registration_json, thesis_json, project_json,
+         file_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     )");
 
     query.addBindValue(course.id);
@@ -30,6 +34,13 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Tirgulim)));
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.labs)));
     query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.blocks)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.DepartmentalSessions)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Reinforcements)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Guidance)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.OptionalColloquium)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Registration)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Thesis)));
+    query.addBindValue(QString::fromStdString(DatabaseJsonHelpers::groupsToJson(course.Project)));
     query.addBindValue(fileId);
 
     if (!query.exec()) {
@@ -39,10 +50,9 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
         return false;
     }
 
-    // Check if the insertion actually happened
     int rowsAffected = query.numRowsAffected();
     if (rowsAffected == 0) {
-        return true;
+        return true; // Already exists
     }
 
     return true;
@@ -144,7 +154,11 @@ vector<Course> DatabaseCourseManager::getAllCourses() {
     }
 
     QSqlQuery query(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester,
+               lectures_json, tutorials_json, labs_json, blocks_json,
+               departmental_sessions_json, reinforcements_json, guidance_json,
+               optional_colloquium_json, registration_json, thesis_json, project_json,
+               file_id
         FROM course ORDER BY course_file_id
     )", db);
 
@@ -165,7 +179,11 @@ Course DatabaseCourseManager::getCourseById(int id) {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester,
+               lectures_json, tutorials_json, labs_json, blocks_json,
+               departmental_sessions_json, reinforcements_json, guidance_json,
+               optional_colloquium_json, registration_json, thesis_json, project_json,
+               file_id
         FROM course WHERE id = ?
     )");
     query.addBindValue(id);
@@ -188,7 +206,11 @@ vector<Course> DatabaseCourseManager::getCoursesByFileId(int fileId) {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester,
+               lectures_json, tutorials_json, labs_json, blocks_json,
+               departmental_sessions_json, reinforcements_json, guidance_json,
+               optional_colloquium_json, registration_json, thesis_json, project_json,
+               file_id
         FROM course WHERE file_id = ? ORDER BY course_file_id
     )");
     query.addBindValue(fileId);
@@ -200,7 +222,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileId(int fileId) {
     }
 
     Logger::get().logInfo("Found " + std::to_string(courseCount) + " courses for file ID: " + std::to_string(fileId));
-
     return courses;
 }
 
@@ -217,8 +238,11 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
     for (int fileId : fileIds) {
         QSqlQuery query(db);
         query.prepare(R"(
-            SELECT c.id, c.course_file_id, c.raw_id, c.name, c.teacher, c.semester, c.lectures_json, c.tutorials_json,
-                   c.labs_json, c.blocks_json, c.file_id, f.file_name, f.upload_time
+            SELECT c.id, c.course_file_id, c.raw_id, c.name, c.teacher, c.semester,
+                   c.lectures_json, c.tutorials_json, c.labs_json, c.blocks_json,
+                   c.departmental_sessions_json, c.reinforcements_json, c.guidance_json,
+                   c.optional_colloquium_json, c.registration_json, c.thesis_json, c.project_json,
+                   c.file_id, f.file_name, f.upload_time
             FROM course c
             JOIN file f ON c.file_id = f.id
             WHERE c.file_id = ?
@@ -235,8 +259,8 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
         int courseCount = 0;
         while (query.next()) {
             Course course = createCourseFromQuery(query);
-            string fileName = query.value(11).toString().toStdString();
-            QDateTime uploadTime = query.value(12).toDateTime();
+            string fileName = query.value(18).toString().toStdString(); // Updated index
+            QDateTime uploadTime = query.value(19).toDateTime(); // Updated index
 
             CourseConflictInfo conflictInfo;
             conflictInfo.course = course;
@@ -244,7 +268,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
             conflictInfo.fileName = fileName;
             conflictInfo.fileId = fileId;
 
-            // Use raw_id + semester as the conflict key to handle semester-specific conflicts
             string conflictKey = course.raw_id + "_sem" + std::to_string(course.semester);
             conflictMap[conflictKey].push_back(conflictInfo);
             courseCount++;
@@ -254,7 +277,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIds(const vector<int>& fil
     }
 
     Logger::get().logInfo("Total unique course raw_id+semester combinations found: " + std::to_string(conflictMap.size()));
-
     return resolveConflicts(conflictMap, warnings);
 }
 
@@ -294,11 +316,20 @@ Course DatabaseCourseManager::createCourseFromQuery(QSqlQuery& query) {
     course.raw_id = query.value(2).toString().toStdString();
     course.name = query.value(3).toString().toStdString();
     course.teacher = query.value(4).toString().toStdString();
-    course.semester = query.value(5).toInt();  // Add semester field
+    course.semester = query.value(5).toInt();
+
+    // Parse ALL session types from JSON
     course.Lectures = DatabaseJsonHelpers::groupsFromJson(query.value(6).toString().toStdString());
     course.Tirgulim = DatabaseJsonHelpers::groupsFromJson(query.value(7).toString().toStdString());
     course.labs = DatabaseJsonHelpers::groupsFromJson(query.value(8).toString().toStdString());
     course.blocks = DatabaseJsonHelpers::groupsFromJson(query.value(9).toString().toStdString());
+    course.DepartmentalSessions = DatabaseJsonHelpers::groupsFromJson(query.value(10).toString().toStdString());
+    course.Reinforcements = DatabaseJsonHelpers::groupsFromJson(query.value(11).toString().toStdString());
+    course.Guidance = DatabaseJsonHelpers::groupsFromJson(query.value(12).toString().toStdString());
+    course.OptionalColloquium = DatabaseJsonHelpers::groupsFromJson(query.value(13).toString().toStdString());
+    course.Registration = DatabaseJsonHelpers::groupsFromJson(query.value(14).toString().toStdString());
+    course.Thesis = DatabaseJsonHelpers::groupsFromJson(query.value(15).toString().toStdString());
+    course.Project = DatabaseJsonHelpers::groupsFromJson(query.value(16).toString().toStdString());
 
     return course;
 }
@@ -353,7 +384,11 @@ vector<Course> DatabaseCourseManager::getCoursesBySemester(int semester) {
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester,
+               lectures_json, tutorials_json, labs_json, blocks_json,
+               departmental_sessions_json, reinforcements_json, guidance_json,
+               optional_colloquium_json, registration_json, thesis_json, project_json,
+               file_id
         FROM course WHERE semester = ? ORDER BY course_file_id
     )");
     query.addBindValue(semester);
@@ -365,7 +400,6 @@ vector<Course> DatabaseCourseManager::getCoursesBySemester(int semester) {
     }
 
     Logger::get().logInfo("Found " + std::to_string(courseCount) + " courses for semester: " + std::to_string(semester));
-
     return courses;
 }
 
@@ -378,7 +412,11 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIdAndSemester(int fileId, 
 
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id
+        SELECT id, course_file_id, raw_id, name, teacher, semester,
+               lectures_json, tutorials_json, labs_json, blocks_json,
+               departmental_sessions_json, reinforcements_json, guidance_json,
+               optional_colloquium_json, registration_json, thesis_json, project_json,
+               file_id
         FROM course WHERE file_id = ? AND semester = ? ORDER BY course_file_id
     )");
     query.addBindValue(fileId);
@@ -392,7 +430,6 @@ vector<Course> DatabaseCourseManager::getCoursesByFileIdAndSemester(int fileId, 
 
     Logger::get().logInfo("Found " + std::to_string(courseCount) + " courses for file ID: " + std::to_string(fileId) +
                           " and semester: " + std::to_string(semester));
-
     return courses;
 }
 
