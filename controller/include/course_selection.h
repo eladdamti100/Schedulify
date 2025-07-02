@@ -69,7 +69,11 @@ public:
     Q_INVOKABLE void filterBySemester(const QString& semester);
 
     // Semester-specific utilities
+
+    // Get course's semester
     Q_INVOKABLE QString getCourseSemester(int courseIndex);
+
+    // Check if a course can be added to semester
     Q_INVOKABLE bool canAddCourseToSemester(int courseIndex);
 
     Q_INVOKABLE void addBlockTime(const QString& day, const QString& startTime, const QString& endTime);

@@ -33,10 +33,10 @@ vector<string> validate_courses(vector<Course> courses);
 vector<string> validateSemesterCourses(const vector<Course>& courses, const string& semesterName);
 
 // Add semester context to function signatures
-void processSessionGroups(const vector<Group>& groups, const string& courseId,
+void processSessionGroups(const vector<Group>& groups, const Course& course,
                           BuildingSchedule& schedule, vector<string>& errors, const string& semesterName);
 
-void processSession(const Session& session, const string& courseId,
+void processSession(const Session& session, const string& courseUniqueId,
                     BuildingSchedule& schedule, vector<string>& errors, const string& semesterName);
 
 // Existing helper functions

@@ -1,5 +1,5 @@
-#ifndef COURSELEGALCOMB_H
-#define COURSELEGALCOMB_H
+#ifndef COURSE_LEGAL_COMB_H
+#define COURSE_LEGAL_COMB_H
 
 #include "model_interfaces.h"
 #include "inner_structs.h"
@@ -36,5 +36,4 @@ private:
             const vector<pair<string, vector<const Group*>>>& availableGroupTypes,
             int courseId);
 };
-
-#endif // COURSELEGALCOMB_H
+#endif // COURSE_LEGAL_COMB_H

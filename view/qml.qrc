@@ -7,6 +7,7 @@
         <file>log_display.qml</file>
         <file>loading_overlay.qml</file>
         <file>popups/ExportMenu.qml</file>
+        <file>popups/SchedBot.qml</file>
         <file>popups/AddCoursePopup.qml</file>
         <file>popups/SortMenu.qml</file>
         <file>popups/SlotBlockMenu.qml</file>
@@ -19,5 +20,6 @@
         <file>icons/ic-loading.svg</file>
         <file>icons/ic-valid.svg</file>
         <file>icons/ic-warning.svg</file>
+        <file>icons/ic-assistant.svg</file>
     </qresource>
 </RCC>

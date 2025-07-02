@@ -41,379 +41,8 @@ CourseSelectionController::~CourseSelectionController() {
     }
 }
 
-// Get course semester
-QString CourseSelectionController::getCourseSemester(int courseIndex) {
-    if (courseIndex < 0 || courseIndex >= static_cast<int>(allCourses.size())) {
-        return "";
-    }
+// Course selection methods
 
-    const Course& course = allCourses[courseIndex];
-
-    switch (course.semester) {
-        case 1: return "A";
-        case 2: return "B";
-        case 3: return "SUMMER";
-        case 4: return "A"; // Year-long courses are treated as A for selection purposes
-        default: return "A";
-    }
-}
-
-// Check if course can be added to semester
-bool CourseSelectionController::canAddCourseToSemester(int courseIndex) {
-    if (courseIndex < 0 || courseIndex >= static_cast<int>(allCourses.size())) {
-        return false;
-    }
-
-    // If course is already selected, we can always deselect it
-    if (isCourseSelected(courseIndex)) {
-        return true;
-    }
-
-    const Course& course = allCourses[courseIndex];
-
-    // Check limits for each semester this course belongs to
-    if (course.semester == 1 || course.semester == 4) { // Semester A
-        if (static_cast<int>(selectedCoursesA.size()) >= 7) {
-            return false;
-        }
-    }
-
-    if (course.semester == 2 || course.semester == 4) { // Semester B
-        if (static_cast<int>(selectedCoursesB.size()) >= 7) {
-            return false;
-        }
-    }
-
-    if (course.semester == 3) { // Summer
-        if (static_cast<int>(selectedCoursesSummer.size()) >= 7) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Update selected courses model for display
-void CourseSelectionController::updateSelectedCoursesModel() {
-    // For display purposes, we'll show the courses for the currently selected semester
-    if (currentSemesterFilter == "A") {
-        m_selectedCoursesModel->populateCoursesData(selectedCoursesA);
-    } else if (currentSemesterFilter == "B") {
-        m_selectedCoursesModel->populateCoursesData(selectedCoursesB);
-    } else if (currentSemesterFilter == "SUMMER") {
-        m_selectedCoursesModel->populateCoursesData(selectedCoursesSummer);
-    } else {
-        // For "ALL" view, combine all courses for display
-        vector<Course> allSelected;
-        allSelected.insert(allSelected.end(), selectedCoursesA.begin(), selectedCoursesA.end());
-        allSelected.insert(allSelected.end(), selectedCoursesB.begin(), selectedCoursesB.end());
-        allSelected.insert(allSelected.end(), selectedCoursesSummer.begin(), selectedCoursesSummer.end());
-        m_selectedCoursesModel->populateCoursesData(allSelected);
-    }
-}
-
-void CourseSelectionController::setValidationInProgress(bool inProgress) {
-    if (m_validationInProgress != inProgress) {
-        m_validationInProgress = inProgress;
-        emit validationStateChanged();
-    }
-}
-
-void CourseSelectionController::setValidationErrors(const QStringList& errors) {
-    if (m_validationErrors != errors) {
-        m_validationErrors = errors;
-        emit validationStateChanged();
-    }
-}
-
-// Clear semester-specific vectors
-void CourseSelectionController::initiateCoursesData(const vector<Course>& courses) {
-    try {
-        if (courses.empty()) {
-            Logger::get().logError("Empty courses vector provided");
-            setValidationErrors(QStringList{"No courses found in file"});
-            return;
-        }
-
-        cleanupValidatorThread();
-        setValidationInProgress(true);
-
-        allCourses = courses;
-        m_courseModel->populateCoursesData(courses);
-
-        filteredCourses = courses;
-        filteredIndicesMap.clear();
-        for (size_t i = 0; i < courses.size(); ++i) {
-            filteredIndicesMap.push_back(static_cast<int>(i));
-        }
-        m_filteredCourseModel->populateCoursesData(filteredCourses, filteredIndicesMap);
-
-        // Clear all semester-specific vectors
-        selectedCoursesA.clear();
-        selectedCoursesB.clear();
-        selectedCoursesSummer.clear();
-        selectedIndicesA.clear();
-        selectedIndicesB.clear();
-        selectedIndicesSummer.clear();
-
-        updateSelectedCoursesModel();
-
-        userBlockTimes.clear();
-        blockTimes.clear();
-        updateBlockTimesModel();
-
-        setValidationErrors(QStringList());
-
-        int timeoutMs = std::min(VALIDATION_TIMEOUT_MS,
-                                 static_cast<int>(courses.size() * 100 + 10000));
-
-        QTimer::singleShot(100, this, [this, courses, timeoutMs]() {
-            validateCourses(courses, timeoutMs);
-        });
-
-    } catch (const std::exception& e) {
-        Logger::get().logError("Exception in initiateCoursesData: " + std::string(e.what()));
-        setValidationInProgress(false);
-    } catch (...) {
-        Logger::get().logError("Unknown exception in initiateCoursesData");
-        setValidationInProgress(false);
-    }
-}
-
-// Start semester-based generation
-void CourseSelectionController::generateSchedules() {
-    // Check if any courses are selected
-    if (selectedCoursesA.empty() && selectedCoursesB.empty() && selectedCoursesSummer.empty()) {
-        emit errorMessage("Please select at least one course");
-        return;
-    }
-
-    // Reset navigation flag when starting new generation
-    hasNavigatedToSchedules = false;
-
-    // Get schedule controller
-    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
-    if (schedule_controller) {
-        // Clear all existing schedules before starting new generation
-        schedule_controller->clearAllSchedules();
-
-        // Reset to Semester A
-        schedule_controller->resetToSemesterA();
-    }
-
-    // Start with Semester A
-    generateSemesterSchedules("A");
-}
-void CourseSelectionController::checkAndNavigateToSchedules() {
-    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
-    if (!schedule_controller) return;
-
-    // Check if we haven't navigated yet and if any semester has schedules
-    if (!hasNavigatedToSchedules) {
-        bool hasAnySchedules = false;
-        QString firstSemesterWithSchedules;
-
-        // Check each semester in order
-        if (schedule_controller->hasSchedulesForSemester("A")) {
-            hasAnySchedules = true;
-            firstSemesterWithSchedules = "A";
-        } else if (schedule_controller->hasSchedulesForSemester("B")) {
-            hasAnySchedules = true;
-            firstSemesterWithSchedules = "B";
-        } else if (schedule_controller->hasSchedulesForSemester("SUMMER")) {
-            hasAnySchedules = true;
-            firstSemesterWithSchedules = "SUMMER";
-        }
-
-        if (hasAnySchedules) {
-            // Navigate to schedules display
-            goToScreen(QUrl(QStringLiteral("qrc:/schedules_display.qml")));
-            hasNavigatedToSchedules = true;
-
-            // Switch to the first semester that has schedules
-            schedule_controller->switchToSemester(firstSemesterWithSchedules);
-        } else {
-            // No schedules for any semester
-            emit errorMessage("No valid schedules found for any semester");
-        }
-    }
-
-    // Notify that all processing is done
-    schedule_controller->allSemestersGenerated();
-}// Handle semester-specific course selection
-
-// Generate schedules for a specific semester
-void CourseSelectionController::generateSemesterSchedules(const QString& semester) {
-    vector<Course> coursesToProcess;
-
-    // Get schedule controller reference
-    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
-
-    // Get courses for the specified semester
-    if (semester == "A") {
-        if (selectedCoursesA.empty()) {
-            // Mark this semester as finished with no schedules
-            if (schedule_controller) {
-                schedule_controller->setSemesterFinished("A", false);
-                schedule_controller->loadSemesterScheduleData("A", std::vector<InformativeSchedule>());
-            }
-            // Move to B
-            generateSemesterSchedules("B");
-            return;
-        }
-        coursesToProcess = selectedCoursesA;
-    } else if (semester == "B") {
-        if (selectedCoursesB.empty()) {
-            // Mark this semester as finished with no schedules
-            if (schedule_controller) {
-                schedule_controller->setSemesterFinished("B", false);
-                schedule_controller->loadSemesterScheduleData("B", std::vector<InformativeSchedule>());
-            }
-            // Move to Summer
-            generateSemesterSchedules("SUMMER");
-            return;
-        }
-        coursesToProcess = selectedCoursesB;
-    } else if (semester == "SUMMER") {
-        if (selectedCoursesSummer.empty()) {
-            // Mark this semester as finished with no schedules
-            if (schedule_controller) {
-                schedule_controller->setSemesterFinished("SUMMER", false);
-                schedule_controller->loadSemesterScheduleData("SUMMER", std::vector<InformativeSchedule>());
-            }
-            // All semesters complete - check if we need to navigate
-            checkAndNavigateToSchedules();
-            return;
-        }
-        coursesToProcess = selectedCoursesSummer;
-    }
-
-    // Add block times if they exist (block times apply to all semesters)
-    vector<BlockTime> currentSemesterBlockTimes = getBlockTimesForCurrentSemester(semester);
-    if (!currentSemesterBlockTimes.empty()) {
-        Course blockCourse = createSingleBlockTimeCourseForSemester(currentSemesterBlockTimes, semester);
-        coursesToProcess.push_back(blockCourse);
-    }
-
-    // Set loading state before starting generation
-    if (schedule_controller) {
-        schedule_controller->setSemesterLoading(semester, true);
-        schedule_controller->setSemesterFinished(semester, false);
-    }
-
-    // Create a worker thread for the operation
-    workerThread = new QThread();
-    auto* worker = new ScheduleGenerator(modelConnection, coursesToProcess);
-    worker->moveToThread(workerThread);
-
-    // Connect signals/slots with semester information
-    connect(workerThread, &QThread::started, worker, &ScheduleGenerator::generateSchedules);
-    connect(worker, &ScheduleGenerator::schedulesGenerated, this,
-            [this, semester](vector<InformativeSchedule>* schedules) {
-                onSemesterSchedulesGenerated(semester, schedules);
-            });
-    connect(worker, &ScheduleGenerator::schedulesGenerated, workerThread, &QThread::quit);
-    connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
-    connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater);
-
-    // Start thread
-    workerThread->start();
-
-    // Show loading overlay
-    auto* engine = qobject_cast<QQmlApplicationEngine*>(getEngine());
-    if (engine && !engine->rootObjects().isEmpty()) {
-        QTimer::singleShot(100, this, [this, engine, semester]() {
-            if (workerThread && workerThread->isRunning()) {
-                QObject* rootObject = engine->rootObjects().first();
-                if (rootObject) {
-                    // Show loading with semester info
-                    QMetaObject::invokeMethod(rootObject, "showLoadingOverlay",
-                                              Q_ARG(QVariant, QVariant(true)));
-                }
-            }
-        });
-    }
-}// Handle completion of semester schedule generation
-void CourseSelectionController::onSemesterSchedulesGenerated(const QString& semester, vector<InformativeSchedule>* schedules) {
-    // Hide loading overlay
-    auto* engine = qobject_cast<QQmlApplicationEngine*>(getEngine());
-    if (engine && !engine->rootObjects().isEmpty()) {
-        QObject* rootObject = engine->rootObjects().first();
-        QMetaObject::invokeMethod(rootObject, "showLoadingOverlay",
-                                  Q_ARG(QVariant, QVariant(false)));
-    }
-
-    // Get schedule controller reference
-    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
-
-    // Always clear loading state, regardless of success/failure
-    if (schedule_controller) {
-        schedule_controller->setSemesterLoading(semester, false);
-    }
-
-    // Check if schedules were generated successfully
-    if (!schedules || schedules->empty()) {
-        // Do NOT mark as finished if no schedules were generated
-        if (schedule_controller) {
-            schedule_controller->setSemesterFinished(semester, false);
-            schedule_controller->loadSemesterScheduleData(semester, std::vector<InformativeSchedule>());
-        }
-
-        // Only show error message if this is the current semester we're trying to view
-        if (semester == "A" || schedule_controller->getCurrentSemester() == semester) {
-            emit errorMessage(QString("No valid schedules found for semester %1").arg(semester));
-        } else {
-            Logger::get().logWarning("No valid schedules found for semester " + semester.toStdString());
-        }
-
-        // Continue to next semester even if current one failed
-        if (semester == "A") {
-            generateSemesterSchedules("B");
-        } else if (semester == "B") {
-            generateSemesterSchedules("SUMMER");
-        } else if (semester == "SUMMER") {
-            // All semesters complete - check if we need to navigate
-            checkAndNavigateToSchedules();
-        }
-
-        workerThread = nullptr;
-        return;
-    }
-
-    // SUCCESS CASE: Schedules were generated
-    emit semesterSchedulesGenerated(semester, schedules);
-
-    // Load the schedule data - this will automatically set finished state to true
-    if (schedule_controller) {
-        schedule_controller->loadSemesterScheduleData(semester, *schedules);
-
-        // Navigate to schedules display if this is the FIRST semester with schedules
-        // Check if we haven't navigated yet
-        if (!hasNavigatedToSchedules) {
-            goToScreen(QUrl(QStringLiteral("qrc:/schedules_display.qml")));
-            hasNavigatedToSchedules = true;
-
-            // Also set this semester as the current one to display
-            schedule_controller->switchToSemester(semester);
-        }
-    }
-
-    // Continue to next semester
-    if (semester == "A") {
-        generateSemesterSchedules("B");
-    } else if (semester == "B") {
-        generateSemesterSchedules("SUMMER");
-    } else if (semester == "SUMMER") {
-        // All semesters complete
-        if (schedule_controller) {
-            schedule_controller->allSemestersGenerated();
-        }
-    }
-
-    workerThread = nullptr;
-}
-
-// Add this new method:
 void CourseSelectionController::toggleCourseSelection(int index) {
     if (index < 0 || index >= static_cast<int>(allCourses.size())) {
         Logger::get().logError("Invalid selected course index");
@@ -479,7 +108,6 @@ void CourseSelectionController::toggleCourseSelection(int index) {
     emit selectionChanged();
 }
 
-// Check if course is selected in any semester
 bool CourseSelectionController::isCourseSelected(int index) {
     bool inA = std::find(selectedIndicesA.begin(), selectedIndicesA.end(), index) != selectedIndicesA.end();
     bool inB = std::find(selectedIndicesB.begin(), selectedIndicesB.end(), index) != selectedIndicesB.end();
@@ -488,48 +116,6 @@ bool CourseSelectionController::isCourseSelected(int index) {
     return inA || inB || inSummer;
 }
 
-// Get count for specific semester
-int CourseSelectionController::getSelectedCoursesCountForSemester(const QString& semester) {
-    if (semester == "A") {
-        return static_cast<int>(selectedCoursesA.size());
-    } else if (semester == "B") {
-        return static_cast<int>(selectedCoursesB.size());
-    } else if (semester == "SUMMER") {
-        return static_cast<int>(selectedCoursesSummer.size());
-    }
-    return 0;
-}
-
-// Get courses for specific semester
-QVariantList CourseSelectionController::getSelectedCoursesForSemester(const QString& semester) {
-    QVariantList result;
-    vector<Course>* coursesVector = nullptr;
-
-    if (semester == "A") {
-        coursesVector = &selectedCoursesA;
-    } else if (semester == "B") {
-        coursesVector = &selectedCoursesB;
-    } else if (semester == "SUMMER") {
-        coursesVector = &selectedCoursesSummer;
-    }
-
-    if (!coursesVector) {
-        return result;
-    }
-
-    for (int i = 0; i < static_cast<int>(coursesVector->size()); i++) {
-        const auto& course = (*coursesVector)[i];
-        QVariantMap courseData;
-        courseData["courseId"] = QString::fromStdString(course.raw_id);
-        courseData["courseName"] = QString::fromStdString(course.name);
-        courseData["originalIndex"] = i;
-        result.append(courseData);
-    }
-
-    return result;
-}
-
-// Deselect course from semester-specific vectors
 void CourseSelectionController::deselectCourse(int selectedIndex) {
     // Since we're now using semester-specific vectors, we need to find the course
     // in the appropriate semester vector based on the currently selected semester
@@ -591,74 +177,8 @@ void CourseSelectionController::deselectCourse(int selectedIndex) {
     emit selectionChanged();
 }
 
-void CourseSelectionController::filterCourses(const QString& searchText) {
-    currentSearchText = searchText;
-    applyFilters();
-}
 
-void CourseSelectionController::resetFilter() {
-    currentSearchText.clear();
-    currentSemesterFilter = "ALL";
-    applyFilters();
-}
-
-void CourseSelectionController::filterBySemester(const QString& semester) {
-    currentSemesterFilter = semester;
-    applyFilters();
-    // Update the selected courses model when semester filter changes
-    updateSelectedCoursesModel();
-}
-
-void CourseSelectionController::applyFilters() {
-    filteredCourses.clear();
-    filteredIndicesMap.clear();
-
-    for (size_t i = 0; i < allCourses.size(); ++i) {
-        const Course& course = allCourses[i];
-
-        if (matchesSemesterFilter(course) && matchesSearchFilter(course, currentSearchText)) {
-            filteredCourses.push_back(course);
-            filteredIndicesMap.push_back(static_cast<int>(i));
-        }
-    }
-
-    m_filteredCourseModel->populateCoursesData(filteredCourses, filteredIndicesMap);
-}
-
-bool CourseSelectionController::matchesSemesterFilter(const Course& course) const {
-    if (currentSemesterFilter == "ALL") {
-        return true;
-    }
-
-    if (currentSemesterFilter == "A") {
-        return course.semester == 1 || course.semester == 4;
-    }
-
-    if (currentSemesterFilter == "B") {
-        return course.semester == 2 || course.semester == 4;
-    }
-
-    if (currentSemesterFilter == "SUMMER") {
-        return course.semester == 3 || course.semester == 4;
-    }
-
-    return true;
-}
-
-bool CourseSelectionController::matchesSearchFilter(const Course& course, const QString& searchText) const {
-    if (searchText.isEmpty()) {
-        return true;
-    }
-
-    QString searchLower = searchText.toLower();
-    QString courseId = QString::fromStdString(course.raw_id).toLower();
-    QString courseName = QString::fromStdString(course.name).toLower();
-    QString teacherName = QString::fromStdString(course.teacher).toLower();
-
-    return courseId.contains(searchLower) ||
-           courseName.contains(searchLower) ||
-           teacherName.contains(searchLower);
-}
+// Create new course methods
 
 void CourseSelectionController::createNewCourse(const QString& courseName, const QString& courseId,
                                                 const QString& teacherName, int semester, const QVariantList& sessionGroups) {
@@ -720,6 +240,13 @@ Course CourseSelectionController::createCourseFromData(const QString& courseName
     course.Tirgulim.clear();
     course.labs.clear();
     course.blocks.clear();
+    course.DepartmentalSessions.clear();
+    course.Reinforcements.clear();
+    course.Guidance.clear();
+    course.OptionalColloquium.clear();
+    course.Registration.clear();
+    course.Thesis.clear();
+    course.Project.clear();
 
     // Process session groups
     for (const QVariant& groupVar : sessionGroups) {
@@ -729,36 +256,44 @@ Course CourseSelectionController::createCourseFromData(const QString& courseName
 
         Group group;
 
-        // Set group type
+        // Set group type based on the expanded enum
         if (groupType == "Lecture") {
             group.type = SessionType::LECTURE;
         } else if (groupType == "Tutorial") {
             group.type = SessionType::TUTORIAL;
         } else if (groupType == "Lab") {
             group.type = SessionType::LAB;
+        } else if (groupType == "Departmental Session") {
+            group.type = SessionType::DEPARTMENTAL_SESSION;
+        } else if (groupType == "Reinforcement") {
+            group.type = SessionType::REINFORCEMENT;
+        } else if (groupType == "Guidance") {
+            group.type = SessionType::GUIDANCE;
+        } else if (groupType == "Optional Colloquium") {
+            group.type = SessionType::OPTIONAL_COLLOQUIUM;
+        } else if (groupType == "Registration") {
+            group.type = SessionType::REGISTRATION;
+        } else if (groupType == "Thesis") {
+            group.type = SessionType::THESIS;
+        } else if (groupType == "Project") {
+            group.type = SessionType::PROJECT;
         } else {
-            group.type = SessionType::LECTURE;
+            group.type = SessionType::LECTURE; // Default fallback
         }
 
         Logger::get().logInfo("parsing group from type: " + groupMap["type"].toString().toStdString());
 
         // Process sessions for this group
         for (const QVariant& sessionVar : sessions) {
-            Logger::get().logInfo("A");
+            Logger::get().logInfo("Processing session");
             QVariantMap sessionMap = sessionVar.toMap();
-            Logger::get().logInfo("B");
 
             Session session;
-            Logger::get().logInfo("C");
-
             session.day_of_week = getDayNumber(sessionMap["day"].toString());
-            Logger::get().logInfo("D");
 
             // Ensure proper time format
             QString startTime = sessionMap["startTime"].toString();
             QString endTime = sessionMap["endTime"].toString();
-
-            Logger::get().logInfo("E");
 
             // Add validation and formatting
             if (!startTime.contains(":")) {
@@ -767,8 +302,6 @@ Course CourseSelectionController::createCourseFromData(const QString& courseName
             if (!endTime.contains(":")) {
                 endTime = endTime + ":00";
             }
-
-            Logger::get().logInfo("F");
 
             session.start_time = startTime.toStdString();
             session.end_time = endTime.toStdString();
@@ -784,17 +317,490 @@ Course CourseSelectionController::createCourseFromData(const QString& courseName
             group.sessions.push_back(session);
         }
 
-        // Add group to appropriate vector
-        if (group.type == SessionType::LECTURE) {
-            course.Lectures.push_back(group);
-        } else if (group.type == SessionType::TUTORIAL) {
-            course.Tirgulim.push_back(group);
-        } else if (group.type == SessionType::LAB) {
-            course.labs.push_back(group);
+        // Add group to appropriate vector based on type
+        switch (group.type) {
+            case SessionType::LECTURE:
+                course.Lectures.push_back(group);
+                break;
+            case SessionType::TUTORIAL:
+                course.Tirgulim.push_back(group);
+                break;
+            case SessionType::LAB:
+                course.labs.push_back(group);
+                break;
+            case SessionType::BLOCK:
+                course.blocks.push_back(group);
+                break;
+            case SessionType::DEPARTMENTAL_SESSION:
+                course.DepartmentalSessions.push_back(group);
+                break;
+            case SessionType::REINFORCEMENT:
+                course.Reinforcements.push_back(group);
+                break;
+            case SessionType::GUIDANCE:
+                course.Guidance.push_back(group);
+                break;
+            case SessionType::OPTIONAL_COLLOQUIUM:
+                course.OptionalColloquium.push_back(group);
+                break;
+            case SessionType::REGISTRATION:
+                course.Registration.push_back(group);
+                break;
+            case SessionType::THESIS:
+                course.Thesis.push_back(group);
+                break;
+            case SessionType::PROJECT:
+                course.Project.push_back(group);
+                break;
+            default:
+                course.Lectures.push_back(group); // Default fallback
+                break;
         }
     }
 
     return course;
+}
+
+// Add blocks methods
+
+void CourseSelectionController::addBlockTime(const QString& day, const QString& startTime, const QString& endTime) {
+    // Validate time format and logic first
+    if (startTime >= endTime) {
+        emit errorMessage("Start time must be before end time");
+        return;
+    }
+
+    // Helper function to convert time string to minutes for easier comparison
+    auto timeToMinutes = [](const QString& time) -> int {
+        QStringList parts = time.split(":");
+        if (parts.size() != 2) return -1;
+        int hours = parts[0].toInt();
+        int minutes = parts[1].toInt();
+        return hours * 60 + minutes;
+    };
+
+    int newStartMinutes = timeToMinutes(startTime);
+    int newEndMinutes = timeToMinutes(endTime);
+
+    if (newStartMinutes == -1 || newEndMinutes == -1) {
+        emit errorMessage("Invalid time format");
+        return;
+    }
+
+    // Check for overlaps with existing block times on the same day
+    for (const auto& blockTime : userBlockTimes) {
+        if (blockTime.day == day) {
+            int existingStartMinutes = timeToMinutes(blockTime.startTime);
+            int existingEndMinutes = timeToMinutes(blockTime.endTime);
+
+            // Check if the new time block overlaps with the existing one
+            // Two time blocks overlap if:
+            // 1. new start time is before existing end time AND
+            // 2. new end time is after existing start time
+            if (newStartMinutes < existingEndMinutes && newEndMinutes > existingStartMinutes) {
+                emit errorMessage(QString("Time block overlaps with existing block on %1 (%2 - %3)")
+                                          .arg(day)
+                                          .arg(blockTime.startTime)
+                                          .arg(blockTime.endTime));
+                return;
+            }
+        }
+    }
+
+    // If we get here, there's no overlap, so add the new block time
+    userBlockTimes.emplace_back(day, startTime, endTime);
+    updateBlockTimesModel();
+
+    emit blockTimesChanged();
+}
+
+void CourseSelectionController::removeBlockTime(int index) {
+    if (index < 0 || index >= static_cast<int>(userBlockTimes.size())) {
+        Logger::get().logError("Invalid block time index for removal");
+        return;
+    }
+
+    userBlockTimes.erase(userBlockTimes.begin() + index);
+    updateBlockTimesModel();
+
+    emit blockTimesChanged();
+}
+
+void CourseSelectionController::clearAllBlockTimes() {
+    userBlockTimes.clear();
+    updateBlockTimesModel();
+    emit blockTimesChanged();
+}
+
+Course CourseSelectionController::createSingleBlockTimeCourse() {
+    Course blockCourse;
+    blockCourse.id = 90000; // Fixed ID for the single block course
+    blockCourse.raw_id = "TIME_BLOCKS";
+    blockCourse.name = "Time Block";
+    blockCourse.teacher = "System Generated";
+
+    // Clear ALL session type vectors
+    blockCourse.Lectures.clear();
+    blockCourse.Tirgulim.clear();
+    blockCourse.labs.clear();
+    blockCourse.blocks.clear();
+    blockCourse.DepartmentalSessions.clear();
+    blockCourse.Reinforcements.clear();
+    blockCourse.Guidance.clear();
+    blockCourse.OptionalColloquium.clear();
+    blockCourse.Registration.clear();
+    blockCourse.Thesis.clear();
+    blockCourse.Project.clear();
+
+    // Create a single group containing all block times
+    Group blockGroup;
+    blockGroup.type = SessionType::BLOCK;
+
+    // Add all user block times as sessions to this single group
+    for (const auto& blockTime : userBlockTimes) {
+        Session blockSession;
+        blockSession.day_of_week = getDayNumber(blockTime.day);
+        blockSession.start_time = blockTime.startTime.toStdString();
+        blockSession.end_time = blockTime.endTime.toStdString();
+        blockSession.building_number = "BLOCKED";
+        blockSession.room_number = "BLOCK";
+
+        blockGroup.sessions.push_back(blockSession);
+    }
+
+    // Add the group to the course's blocks
+    blockCourse.blocks.push_back(blockGroup);
+
+    return blockCourse;
+}
+
+void CourseSelectionController::updateBlockTimesModel() {
+    blockTimes.clear();
+
+    for (size_t i = 0; i < userBlockTimes.size(); ++i) {
+        const BlockTime& blockTime = userBlockTimes[i];
+        Course blockCourse;
+        blockCourse.id = static_cast<int>(i) + 90000;
+        // Include semester in the display
+        blockCourse.raw_id = (blockTime.startTime + " - " + blockTime.endTime + " (" + blockTime.semester + ")").toStdString();
+        blockCourse.name = "Blocked Time (" + blockTime.semester.toStdString() + ")";
+        blockCourse.teacher = blockTime.day.toStdString(); // Store day in teacher field for display
+
+        // Clear ALL session type vectors
+        blockCourse.Lectures.clear();
+        blockCourse.Tirgulim.clear();
+        blockCourse.labs.clear();
+        blockCourse.blocks.clear();
+        blockCourse.DepartmentalSessions.clear();
+        blockCourse.Reinforcements.clear();
+        blockCourse.Guidance.clear();
+        blockCourse.OptionalColloquium.clear();
+        blockCourse.Registration.clear();
+        blockCourse.Thesis.clear();
+        blockCourse.Project.clear();
+
+        // Create a group for this block time
+        Group blockGroup;
+        blockGroup.type = SessionType::BLOCK;
+
+        Session blockSession;
+        blockSession.day_of_week = getDayNumber(blockTime.day);
+        blockSession.start_time = blockTime.startTime.toStdString();
+        blockSession.end_time = blockTime.endTime.toStdString();
+        blockSession.building_number = "BLOCKED";
+        blockSession.room_number = "BLOCK";
+
+        blockGroup.sessions.push_back(blockSession);
+        blockCourse.blocks.push_back(blockGroup);
+
+        blockTimes.push_back(blockCourse);
+    }
+    m_blocksModel->populateCoursesData(blockTimes);
+}
+
+void CourseSelectionController::addBlockTimeToSemester(const QString& day, const QString& startTime,
+                                                       const QString& endTime, const QString& semester) {
+    // Validate time format and logic first
+    if (startTime >= endTime) {
+        emit errorMessage("Start time must be before end time");
+        return;
+    }
+
+    // Helper function to convert time string to minutes for easier comparison
+    auto timeToMinutes = [](const QString& time) -> int {
+        QStringList parts = time.split(":");
+        if (parts.size() != 2) return -1;
+        int hours = parts[0].toInt();
+        int minutes = parts[1].toInt();
+        return hours * 60 + minutes;
+    };
+
+    int newStartMinutes = timeToMinutes(startTime);
+    int newEndMinutes = timeToMinutes(endTime);
+
+    if (newStartMinutes == -1 || newEndMinutes == -1) {
+        emit errorMessage("Invalid time format");
+        return;
+    }
+
+    // Check for overlaps with existing block times on the same day IN THE SAME SEMESTER
+    for (const auto& blockTime : userBlockTimes) {
+        // Only check against block times in the same semester
+        if (blockTime.day == day && blockTime.semester == semester) {
+            int existingStartMinutes = timeToMinutes(blockTime.startTime);
+            int existingEndMinutes = timeToMinutes(blockTime.endTime);
+
+            // Check if the new time block overlaps with the existing one
+            if (newStartMinutes < existingEndMinutes && newEndMinutes > existingStartMinutes) {
+                emit errorMessage(QString("Time block overlaps with existing block on %1 in semester %2 (%3 - %4)")
+                                          .arg(day)
+                                          .arg(semester)
+                                          .arg(blockTime.startTime)
+                                          .arg(blockTime.endTime));
+                return;
+            }
+        }
+    }
+
+    // If we get here, there's no overlap, so add the new block time with semester info
+    userBlockTimes.emplace_back(day, startTime, endTime, semester);
+    updateBlockTimesModel();
+
+    emit blockTimesChanged();
+}
+
+vector<BlockTime> CourseSelectionController::getBlockTimesForCurrentSemester(const QString& semester) {
+    vector<BlockTime> result;
+
+    // Filter userBlockTimes by semester
+    for (const auto& blockTime : userBlockTimes) {
+        if (blockTime.semester == semester) {
+            result.push_back(blockTime);
+        }
+    }
+
+    return result;
+}
+
+Course CourseSelectionController::createSingleBlockTimeCourseForSemester(const vector<BlockTime>& semesterBlockTimes,
+                                                                         const QString& semester) {
+
+    Course blockCourse;
+    blockCourse.id = 90000;
+    blockCourse.raw_id = "TIME_BLOCKS_" + semester.toStdString();
+    blockCourse.name = "Time Block (" + semester.toStdString() + ")";
+    blockCourse.teacher = "System Generated";
+
+    // Clear ALL session type vectors
+    blockCourse.Lectures.clear();
+    blockCourse.Tirgulim.clear();
+    blockCourse.labs.clear();
+    blockCourse.blocks.clear();
+    blockCourse.DepartmentalSessions.clear();
+    blockCourse.Reinforcements.clear();
+    blockCourse.Guidance.clear();
+    blockCourse.OptionalColloquium.clear();
+    blockCourse.Registration.clear();
+    blockCourse.Thesis.clear();
+    blockCourse.Project.clear();
+
+    Group blockGroup;
+    blockGroup.type = SessionType::BLOCK;
+
+    for (const auto& blockTime : semesterBlockTimes) {
+        Session blockSession;
+        blockSession.day_of_week = getDayNumber(blockTime.day);
+        blockSession.start_time = blockTime.startTime.toStdString();
+        blockSession.end_time = blockTime.endTime.toStdString();
+        blockSession.building_number = "BLOCKED";
+        blockSession.room_number = "BLOCK";
+
+        blockGroup.sessions.push_back(blockSession);
+    }
+
+    if (!blockGroup.sessions.empty()) {
+        blockCourse.blocks.push_back(blockGroup);
+    }
+
+    return blockCourse;
+}
+
+// Manage semester
+
+QString CourseSelectionController::getCourseSemester(int courseIndex) {
+    if (courseIndex < 0 || courseIndex >= static_cast<int>(allCourses.size())) {
+        return "";
+    }
+
+    const Course& course = allCourses[courseIndex];
+
+    switch (course.semester) {
+        case 1: return "A";
+        case 2: return "B";
+        case 3: return "SUMMER";
+        case 4: return "A"; // Year-long courses are treated as A for selection purposes
+        default: return "A";
+    }
+}
+
+bool CourseSelectionController::canAddCourseToSemester(int courseIndex) {
+    if (courseIndex < 0 || courseIndex >= static_cast<int>(allCourses.size())) {
+        return false;
+    }
+
+    // If course is already selected, we can always deselect it
+    if (isCourseSelected(courseIndex)) {
+        return true;
+    }
+
+    const Course& course = allCourses[courseIndex];
+
+    // Check limits for each semester this course belongs to
+    if (course.semester == 1 || course.semester == 4) { // Semester A
+        if (static_cast<int>(selectedCoursesA.size()) >= 7) {
+            return false;
+        }
+    }
+
+    if (course.semester == 2 || course.semester == 4) { // Semester B
+        if (static_cast<int>(selectedCoursesB.size()) >= 7) {
+            return false;
+        }
+    }
+
+    if (course.semester == 3) { // Summer
+        if (static_cast<int>(selectedCoursesSummer.size()) >= 7) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void CourseSelectionController::updateSelectedCoursesModel() {
+    // For display purposes, we'll show the courses for the currently selected semester
+    if (currentSemesterFilter == "A") {
+        m_selectedCoursesModel->populateCoursesData(selectedCoursesA);
+    } else if (currentSemesterFilter == "B") {
+        m_selectedCoursesModel->populateCoursesData(selectedCoursesB);
+    } else if (currentSemesterFilter == "SUMMER") {
+        m_selectedCoursesModel->populateCoursesData(selectedCoursesSummer);
+    } else {
+        vector<Course> allSelected;
+        allSelected.insert(allSelected.end(), selectedCoursesA.begin(), selectedCoursesA.end());
+        allSelected.insert(allSelected.end(), selectedCoursesB.begin(), selectedCoursesB.end());
+        allSelected.insert(allSelected.end(), selectedCoursesSummer.begin(), selectedCoursesSummer.end());
+        m_selectedCoursesModel->populateCoursesData(allSelected);
+    }
+}
+
+void CourseSelectionController::initiateCoursesData(const vector<Course>& courses) {
+    try {
+        if (courses.empty()) {
+            Logger::get().logError("Empty courses vector provided");
+            setValidationErrors(QStringList{"No courses found in file"});
+            return;
+        }
+
+        cleanupValidatorThread();
+        setValidationInProgress(true);
+
+        allCourses = courses;
+        m_courseModel->populateCoursesData(courses);
+
+        filteredCourses = courses;
+        filteredIndicesMap.clear();
+        for (size_t i = 0; i < courses.size(); ++i) {
+            filteredIndicesMap.push_back(static_cast<int>(i));
+        }
+        m_filteredCourseModel->populateCoursesData(filteredCourses, filteredIndicesMap);
+
+        // Clear all semester-specific vectors
+        selectedCoursesA.clear();
+        selectedCoursesB.clear();
+        selectedCoursesSummer.clear();
+        selectedIndicesA.clear();
+        selectedIndicesB.clear();
+        selectedIndicesSummer.clear();
+
+        updateSelectedCoursesModel();
+
+        userBlockTimes.clear();
+        blockTimes.clear();
+        updateBlockTimesModel();
+
+        setValidationErrors(QStringList());
+
+        int timeoutMs = std::min(VALIDATION_TIMEOUT_MS,
+                                 static_cast<int>(courses.size() * 100 + 10000));
+
+        QTimer::singleShot(100, this, [this, courses, timeoutMs]() {
+            validateCourses(courses, timeoutMs);
+        });
+
+    } catch (const std::exception& e) {
+        Logger::get().logError("Exception in initiateCoursesData: " + std::string(e.what()));
+        setValidationInProgress(false);
+    } catch (...) {
+        Logger::get().logError("Unknown exception in initiateCoursesData");
+        setValidationInProgress(false);
+    }
+}
+
+int CourseSelectionController::getSelectedCoursesCountForSemester(const QString& semester) {
+    if (semester == "A") {
+        return static_cast<int>(selectedCoursesA.size());
+    } else if (semester == "B") {
+        return static_cast<int>(selectedCoursesB.size());
+    } else if (semester == "SUMMER") {
+        return static_cast<int>(selectedCoursesSummer.size());
+    }
+    return 0;
+}
+
+QVariantList CourseSelectionController::getSelectedCoursesForSemester(const QString& semester) {
+    QVariantList result;
+    vector<Course>* coursesVector = nullptr;
+
+    if (semester == "A") {
+        coursesVector = &selectedCoursesA;
+    } else if (semester == "B") {
+        coursesVector = &selectedCoursesB;
+    } else if (semester == "SUMMER") {
+        coursesVector = &selectedCoursesSummer;
+    }
+
+    if (!coursesVector) {
+        return result;
+    }
+
+    for (int i = 0; i < static_cast<int>(coursesVector->size()); i++) {
+        const auto& course = (*coursesVector)[i];
+        QVariantMap courseData;
+        courseData["courseId"] = QString::fromStdString(course.raw_id);
+        courseData["courseName"] = QString::fromStdString(course.name);
+        courseData["originalIndex"] = i;
+        result.append(courseData);
+    }
+
+    return result;
+}
+
+
+// Validate courses
+
+void CourseSelectionController::setValidationInProgress(bool inProgress) {
+    if (m_validationInProgress != inProgress) {
+        m_validationInProgress = inProgress;
+        emit validationStateChanged();
+    }
+}
+
+void CourseSelectionController::setValidationErrors(const QStringList& errors) {
+    if (m_validationErrors != errors) {
+        m_validationErrors = errors;
+        emit validationStateChanged();
+    }
 }
 
 void CourseSelectionController::validateCourses(const vector<Course>& courses, int timeoutMs) {
@@ -992,145 +998,316 @@ void CourseSelectionController::cleanupValidatorThread() {
     validationCompleted = false;
 }
 
-void CourseSelectionController::addBlockTime(const QString& day, const QString& startTime, const QString& endTime) {
-    // Validate time format and logic first
-    if (startTime >= endTime) {
-        emit errorMessage("Start time must be before end time");
-        return;
-    }
 
-    // Helper function to convert time string to minutes for easier comparison
-    auto timeToMinutes = [](const QString& time) -> int {
-        QStringList parts = time.split(":");
-        if (parts.size() != 2) return -1;
-        int hours = parts[0].toInt();
-        int minutes = parts[1].toInt();
-        return hours * 60 + minutes;
-    };
+// Filter courses
 
-    int newStartMinutes = timeToMinutes(startTime);
-    int newEndMinutes = timeToMinutes(endTime);
+void CourseSelectionController::filterCourses(const QString& searchText) {
+    currentSearchText = searchText;
+    applyFilters();
+}
 
-    if (newStartMinutes == -1 || newEndMinutes == -1) {
-        emit errorMessage("Invalid time format");
-        return;
-    }
+void CourseSelectionController::resetFilter() {
+    currentSearchText.clear();
+    currentSemesterFilter = "ALL";
+    applyFilters();
+}
 
-    // Check for overlaps with existing block times on the same day
-    for (const auto& blockTime : userBlockTimes) {
-        if (blockTime.day == day) {
-            int existingStartMinutes = timeToMinutes(blockTime.startTime);
-            int existingEndMinutes = timeToMinutes(blockTime.endTime);
+void CourseSelectionController::filterBySemester(const QString& semester) {
+    currentSemesterFilter = semester;
+    applyFilters();
+    // Update the selected courses model when semester filter changes
+    updateSelectedCoursesModel();
+}
 
-            // Check if the new time block overlaps with the existing one
-            // Two time blocks overlap if:
-            // 1. new start time is before existing end time AND
-            // 2. new end time is after existing start time
-            if (newStartMinutes < existingEndMinutes && newEndMinutes > existingStartMinutes) {
-                emit errorMessage(QString("Time block overlaps with existing block on %1 (%2 - %3)")
-                                          .arg(day)
-                                          .arg(blockTime.startTime)
-                                          .arg(blockTime.endTime));
-                return;
-            }
+void CourseSelectionController::applyFilters() {
+    filteredCourses.clear();
+    filteredIndicesMap.clear();
+
+    for (size_t i = 0; i < allCourses.size(); ++i) {
+        const Course& course = allCourses[i];
+
+        if (matchesSemesterFilter(course) && matchesSearchFilter(course, currentSearchText)) {
+            filteredCourses.push_back(course);
+            filteredIndicesMap.push_back(static_cast<int>(i));
         }
     }
 
-    // If we get here, there's no overlap, so add the new block time
-    userBlockTimes.emplace_back(day, startTime, endTime);
-    updateBlockTimesModel();
-
-    emit blockTimesChanged();
+    m_filteredCourseModel->populateCoursesData(filteredCourses, filteredIndicesMap);
 }
 
-void CourseSelectionController::removeBlockTime(int index) {
-    if (index < 0 || index >= static_cast<int>(userBlockTimes.size())) {
-        Logger::get().logError("Invalid block time index for removal");
+bool CourseSelectionController::matchesSemesterFilter(const Course& course) const {
+    if (currentSemesterFilter == "ALL") {
+        return true;
+    }
+
+    if (currentSemesterFilter == "A") {
+        return course.semester == 1 || course.semester == 4;
+    }
+
+    if (currentSemesterFilter == "B") {
+        return course.semester == 2 || course.semester == 4;
+    }
+
+    if (currentSemesterFilter == "SUMMER") {
+        return course.semester == 3 || course.semester == 4;
+    }
+
+    return true;
+}
+
+bool CourseSelectionController::matchesSearchFilter(const Course& course, const QString& searchText) const {
+    if (searchText.isEmpty()) {
+        return true;
+    }
+
+    QString searchLower = searchText.toLower();
+    QString courseId = QString::fromStdString(course.raw_id).toLower();
+    QString courseName = QString::fromStdString(course.name).toLower();
+    QString teacherName = QString::fromStdString(course.teacher).toLower();
+
+    return courseId.contains(searchLower) ||
+           courseName.contains(searchLower) ||
+           teacherName.contains(searchLower);
+}
+
+
+// Generate schedules
+
+void CourseSelectionController::generateSchedules() {
+    // Check if any courses are selected
+    if (selectedCoursesA.empty() && selectedCoursesB.empty() && selectedCoursesSummer.empty()) {
+        emit errorMessage("Please select at least one course");
         return;
     }
 
-    userBlockTimes.erase(userBlockTimes.begin() + index);
-    updateBlockTimesModel();
+    // Reset navigation flag when starting new generation
+    hasNavigatedToSchedules = false;
 
-    emit blockTimesChanged();
-}
+    // Get schedule controller
+    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
+    if (schedule_controller) {
+        // Clear all existing schedules before starting new generation
+        schedule_controller->clearAllSchedules();
 
-void CourseSelectionController::clearAllBlockTimes() {
-    userBlockTimes.clear();
-    updateBlockTimesModel();
-    emit blockTimesChanged();
-}
-
-Course CourseSelectionController::createSingleBlockTimeCourse() {
-    Course blockCourse;
-    blockCourse.id = 90000; // Fixed ID for the single block course
-    blockCourse.raw_id = "TIME_BLOCKS";
-    blockCourse.name = "Time Block";
-    blockCourse.teacher = "System Generated";
-
-    // Clear all session type vectors
-    blockCourse.Lectures.clear();
-    blockCourse.Tirgulim.clear();
-    blockCourse.labs.clear();
-    blockCourse.blocks.clear();
-
-    // Create a single group containing all block times
-    Group blockGroup;
-    blockGroup.type = SessionType::BLOCK;
-
-    // Add all user block times as sessions to this single group
-    for (const auto& blockTime : userBlockTimes) {
-        Session blockSession;
-        blockSession.day_of_week = getDayNumber(blockTime.day);
-        blockSession.start_time = blockTime.startTime.toStdString();
-        blockSession.end_time = blockTime.endTime.toStdString();
-        blockSession.building_number = "BLOCKED";
-        blockSession.room_number = "BLOCK";
-
-        blockGroup.sessions.push_back(blockSession);
+        // Reset to Semester A
+        schedule_controller->resetToSemesterA();
     }
 
-    // Add the group to the course's blocks
-    blockCourse.blocks.push_back(blockGroup);
-
-    return blockCourse;
+    // Start with Semester A
+    generateSemesterSchedules("A");
 }
 
-void CourseSelectionController::updateBlockTimesModel() {
-    blockTimes.clear();
+void CourseSelectionController::generateSemesterSchedules(const QString& semester) {
+    vector<Course> coursesToProcess;
 
-    for (size_t i = 0; i < userBlockTimes.size(); ++i) {
-        const BlockTime& blockTime = userBlockTimes[i];
-        Course blockCourse;
-        blockCourse.id = static_cast<int>(i) + 90000;
-        // Include semester in the display
-        blockCourse.raw_id = (blockTime.startTime + " - " + blockTime.endTime + " (" + blockTime.semester + ")").toStdString();
-        blockCourse.name = "Blocked Time (" + blockTime.semester.toStdString() + ")";
-        blockCourse.teacher = blockTime.day.toStdString(); // Store day in teacher field for display
+    // Get schedule controller reference
+    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
 
-        blockCourse.Lectures.clear();
-        blockCourse.Tirgulim.clear();
-        blockCourse.labs.clear();
-        blockCourse.blocks.clear();
-
-        // Create a group for this block time
-        Group blockGroup;
-        blockGroup.type = SessionType::BLOCK;
-
-        Session blockSession;
-        blockSession.day_of_week = getDayNumber(blockTime.day);
-        blockSession.start_time = blockTime.startTime.toStdString();
-        blockSession.end_time = blockTime.endTime.toStdString();
-        blockSession.building_number = "BLOCKED";
-        blockSession.room_number = "BLOCK";
-
-        blockGroup.sessions.push_back(blockSession);
-        blockCourse.blocks.push_back(blockGroup);
-
-        blockTimes.push_back(blockCourse);
+    // Get courses for the specified semester
+    if (semester == "A") {
+        if (selectedCoursesA.empty()) {
+            // Mark this semester as finished with no schedules
+            if (schedule_controller) {
+                schedule_controller->setSemesterFinished("A", false);
+                schedule_controller->loadSemesterScheduleData("A", std::vector<InformativeSchedule>());
+            }
+            // Move to B
+            generateSemesterSchedules("B");
+            return;
+        }
+        coursesToProcess = selectedCoursesA;
+    } else if (semester == "B") {
+        if (selectedCoursesB.empty()) {
+            // Mark this semester as finished with no schedules
+            if (schedule_controller) {
+                schedule_controller->setSemesterFinished("B", false);
+                schedule_controller->loadSemesterScheduleData("B", std::vector<InformativeSchedule>());
+            }
+            // Move to Summer
+            generateSemesterSchedules("SUMMER");
+            return;
+        }
+        coursesToProcess = selectedCoursesB;
+    } else if (semester == "SUMMER") {
+        if (selectedCoursesSummer.empty()) {
+            // Mark this semester as finished with no schedules
+            if (schedule_controller) {
+                schedule_controller->setSemesterFinished("SUMMER", false);
+                schedule_controller->loadSemesterScheduleData("SUMMER", std::vector<InformativeSchedule>());
+            }
+            // All semesters complete - check if we need to navigate
+            checkAndNavigateToSchedules();
+            return;
+        }
+        coursesToProcess = selectedCoursesSummer;
     }
-    m_blocksModel->populateCoursesData(blockTimes);
+
+    // Add block times if they exist (block times apply to all semesters)
+    vector<BlockTime> currentSemesterBlockTimes = getBlockTimesForCurrentSemester(semester);
+    if (!currentSemesterBlockTimes.empty()) {
+        Course blockCourse = createSingleBlockTimeCourseForSemester(currentSemesterBlockTimes, semester);
+        coursesToProcess.push_back(blockCourse);
+    }
+
+    // Set loading state before starting generation
+    if (schedule_controller) {
+        schedule_controller->setSemesterLoading(semester, true);
+        schedule_controller->setSemesterFinished(semester, false);
+    }
+
+    // Create a worker thread for the operation
+    workerThread = new QThread();
+    auto* worker = new ScheduleGenerator(modelConnection, coursesToProcess, semester);
+    worker->moveToThread(workerThread);
+
+    // Connect signals/slots with semester information
+    connect(workerThread, &QThread::started, worker, &ScheduleGenerator::generateSchedules);
+    connect(worker, &ScheduleGenerator::schedulesGenerated, this,
+            [this, semester](vector<InformativeSchedule>* schedules) {
+                onSemesterSchedulesGenerated(semester, schedules);
+            });
+    connect(worker, &ScheduleGenerator::schedulesGenerated, workerThread, &QThread::quit);
+    connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(workerThread, &QThread::finished, workerThread, &QObject::deleteLater);
+
+    // Start thread
+    workerThread->start();
+
+    // Show loading overlay
+    auto* engine = qobject_cast<QQmlApplicationEngine*>(getEngine());
+    if (engine && !engine->rootObjects().isEmpty()) {
+        QTimer::singleShot(100, this, [this, engine, semester]() {
+            if (workerThread && workerThread->isRunning()) {
+                QObject* rootObject = engine->rootObjects().first();
+                if (rootObject) {
+                    // Show loading with semester info
+                    QMetaObject::invokeMethod(rootObject, "showLoadingOverlay",
+                                              Q_ARG(QVariant, QVariant(true)));
+                }
+            }
+        });
+    }
 }
+
+void CourseSelectionController::checkAndNavigateToSchedules() {
+    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
+    if (!schedule_controller) return;
+
+    // Check if we haven't navigated yet and if any semester has schedules
+    if (!hasNavigatedToSchedules) {
+        bool hasAnySchedules = false;
+        QString firstSemesterWithSchedules;
+
+        // Check each semester in order
+        if (schedule_controller->hasSchedulesForSemester("A")) {
+            hasAnySchedules = true;
+            firstSemesterWithSchedules = "A";
+        } else if (schedule_controller->hasSchedulesForSemester("B")) {
+            hasAnySchedules = true;
+            firstSemesterWithSchedules = "B";
+        } else if (schedule_controller->hasSchedulesForSemester("SUMMER")) {
+            hasAnySchedules = true;
+            firstSemesterWithSchedules = "SUMMER";
+        }
+
+        if (hasAnySchedules) {
+            // Navigate to schedules display
+            goToScreen(QUrl(QStringLiteral("qrc:/schedules_display.qml")));
+            hasNavigatedToSchedules = true;
+
+            // Switch to the first semester that has schedules
+            schedule_controller->switchToSemester(firstSemesterWithSchedules);
+        } else {
+            // No schedules for any semester
+            emit errorMessage("No valid schedules found for any semester");
+        }
+    }
+
+    // Notify that all processing is done
+    schedule_controller->allSemestersGenerated();
+}
+
+void CourseSelectionController::onSemesterSchedulesGenerated(const QString& semester, vector<InformativeSchedule>* schedules) {
+    // Hide loading overlay
+    auto* engine = qobject_cast<QQmlApplicationEngine*>(getEngine());
+    if (engine && !engine->rootObjects().isEmpty()) {
+        QObject* rootObject = engine->rootObjects().first();
+        QMetaObject::invokeMethod(rootObject, "showLoadingOverlay",
+                                  Q_ARG(QVariant, QVariant(false)));
+    }
+
+    // Get schedule controller reference
+    auto* schedule_controller = qobject_cast<SchedulesDisplayController*>(findController("schedulesDisplayController"));
+
+    // Always clear loading state, regardless of success/failure
+    if (schedule_controller) {
+        schedule_controller->setSemesterLoading(semester, false);
+    }
+
+    // Check if schedules were generated successfully
+    if (!schedules || schedules->empty()) {
+        // Do NOT mark as finished if no schedules were generated
+        if (schedule_controller) {
+            schedule_controller->setSemesterFinished(semester, false);
+            schedule_controller->loadSemesterScheduleData(semester, std::vector<InformativeSchedule>());
+        }
+
+        // Only show error message if this is the current semester we're trying to view
+        if (semester == "A" || schedule_controller->getCurrentSemester() == semester) {
+            emit errorMessage(QString("No valid schedules found for semester %1").arg(semester));
+        } else {
+            Logger::get().logWarning("No valid schedules found for semester " + semester.toStdString());
+        }
+
+        // Continue to next semester even if current one failed
+        if (semester == "A") {
+            generateSemesterSchedules("B");
+        } else if (semester == "B") {
+            generateSemesterSchedules("SUMMER");
+        } else if (semester == "SUMMER") {
+            // All semesters complete - check if we need to navigate
+            checkAndNavigateToSchedules();
+        }
+
+        workerThread = nullptr;
+        return;
+    }
+
+    // SUCCESS CASE: Schedules were generated
+    emit semesterSchedulesGenerated(semester, schedules);
+
+    // Load the schedule data - this will automatically set finished state to true
+    if (schedule_controller) {
+        schedule_controller->loadSemesterScheduleData(semester, *schedules);
+
+        // Navigate to schedules display if this is the FIRST semester with schedules
+        // Check if we haven't navigated yet
+        if (!hasNavigatedToSchedules) {
+            goToScreen(QUrl(QStringLiteral("qrc:/schedules_display.qml")));
+            hasNavigatedToSchedules = true;
+
+            // Also set this semester as the current one to display
+            schedule_controller->switchToSemester(semester);
+        }
+    }
+
+    // Continue to next semester
+    if (semester == "A") {
+        generateSemesterSchedules("B");
+    } else if (semester == "B") {
+        generateSemesterSchedules("SUMMER");
+    } else if (semester == "SUMMER") {
+        // All semesters complete
+        if (schedule_controller) {
+            schedule_controller->allSemestersGenerated();
+        }
+    }
+
+    workerThread = nullptr;
+}
+
+
+// Helper methods
 
 int CourseSelectionController::getDayNumber(const QString& dayName) {
     if (dayName == "Sunday") return 1;
@@ -1141,102 +1318,4 @@ int CourseSelectionController::getDayNumber(const QString& dayName) {
     if (dayName == "Friday") return 6;
     if (dayName == "Saturday") return 7;
     return 1;
-}
-void CourseSelectionController::addBlockTimeToSemester(const QString& day, const QString& startTime,
-                                                       const QString& endTime, const QString& semester) {
-    // Validate time format and logic first
-    if (startTime >= endTime) {
-        emit errorMessage("Start time must be before end time");
-        return;
-    }
-
-    // Helper function to convert time string to minutes for easier comparison
-    auto timeToMinutes = [](const QString& time) -> int {
-        QStringList parts = time.split(":");
-        if (parts.size() != 2) return -1;
-        int hours = parts[0].toInt();
-        int minutes = parts[1].toInt();
-        return hours * 60 + minutes;
-    };
-
-    int newStartMinutes = timeToMinutes(startTime);
-    int newEndMinutes = timeToMinutes(endTime);
-
-    if (newStartMinutes == -1 || newEndMinutes == -1) {
-        emit errorMessage("Invalid time format");
-        return;
-    }
-
-    // Check for overlaps with existing block times on the same day IN THE SAME SEMESTER
-    for (const auto& blockTime : userBlockTimes) {
-        // Only check against block times in the same semester
-        if (blockTime.day == day && blockTime.semester == semester) {
-            int existingStartMinutes = timeToMinutes(blockTime.startTime);
-            int existingEndMinutes = timeToMinutes(blockTime.endTime);
-
-            // Check if the new time block overlaps with the existing one
-            if (newStartMinutes < existingEndMinutes && newEndMinutes > existingStartMinutes) {
-                emit errorMessage(QString("Time block overlaps with existing block on %1 in semester %2 (%3 - %4)")
-                                          .arg(day)
-                                          .arg(semester)
-                                          .arg(blockTime.startTime)
-                                          .arg(blockTime.endTime));
-                return;
-            }
-        }
-    }
-
-    // If we get here, there's no overlap, so add the new block time with semester info
-    userBlockTimes.emplace_back(day, startTime, endTime, semester);
-    updateBlockTimesModel();
-
-    emit blockTimesChanged();
-}
-vector<BlockTime> CourseSelectionController::getBlockTimesForCurrentSemester(const QString& semester) {
-    vector<BlockTime> result;
-
-    // Filter userBlockTimes by semester
-    for (const auto& blockTime : userBlockTimes) {
-        if (blockTime.semester == semester) {
-            result.push_back(blockTime);
-        }
-    }
-
-    return result;
-}
-
-// Method to create block course for specific semester only
-Course CourseSelectionController::createSingleBlockTimeCourseForSemester(
-        const vector<BlockTime>& semesterBlockTimes, const QString& semester) {
-
-    Course blockCourse;
-    blockCourse.id = 90000;
-    blockCourse.raw_id = "TIME_BLOCKS_" + semester.toStdString();
-    blockCourse.name = "Time Block (" + semester.toStdString() + ")";
-    blockCourse.teacher = "System Generated";
-
-    blockCourse.Lectures.clear();
-    blockCourse.Tirgulim.clear();
-    blockCourse.labs.clear();
-    blockCourse.blocks.clear();
-
-    Group blockGroup;
-    blockGroup.type = SessionType::BLOCK;
-
-    for (const auto& blockTime : semesterBlockTimes) {
-        Session blockSession;
-        blockSession.day_of_week = getDayNumber(blockTime.day);
-        blockSession.start_time = blockTime.startTime.toStdString();
-        blockSession.end_time = blockTime.endTime.toStdString();
-        blockSession.building_number = "BLOCKED";
-        blockSession.room_number = "BLOCK";
-
-        blockGroup.sessions.push_back(blockSession);
-    }
-
-    if (!blockGroup.sessions.empty()) {
-        blockCourse.blocks.push_back(blockGroup);
-    }
-
-    return blockCourse;
 }

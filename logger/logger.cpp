@@ -1,4 +1,6 @@
 #include "logger.h"
+#include <QApplication>
+#include <QMessageBox>
 
 Logger::Logger() : QObject(nullptr) {}
 
@@ -58,6 +60,74 @@ const vector<LogEntry>& Logger::getLogs() const {
     return logList;
 }
 
+bool Logger::downloadLogs() {
+    try {
+        // Get default download path
+        QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        if (defaultPath.isEmpty()) {
+            defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        }
+
+        // Generate default filename with current timestamp
+        QString defaultFileName = QString("schedulify_logs_%1.txt")
+                .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss"));
+
+        QString defaultFilePath = defaultPath + "/" + defaultFileName;
+
+        // Show file dialog
+        QString filePath = QFileDialog::getSaveFileName(
+                nullptr,
+                "Save Logs As",
+                defaultFilePath,
+                "Text Files (*.txt);;All Files (*)"
+        );
+
+        if (filePath.isEmpty()) {
+            // User cancelled
+            return false;
+        }
+
+        // Ensure .txt extension
+        if (!filePath.endsWith(".txt", Qt::CaseInsensitive)) {
+            filePath += ".txt";
+        }
+
+        // Create and write to file
+        std::ofstream file(filePath.toStdString());
+        if (!file.is_open()) {
+            emit downloadFailed("Could not create file: " + filePath);
+            return false;
+        }
+
+        // Write header
+        file << "Schedulify Logs Export" << std::endl;
+        file << "Generated: " << getTimeStamp() << std::endl;
+        file << "Total Entries: ";
+
+        {
+            std::lock_guard<std::mutex> lock(logMutex);
+            file << logList.size() << std::endl;
+            file << "================================" << std::endl << std::endl;
+
+            // Write all log entries
+            for (const auto& entry : logList) {
+                file << "[" << entry.timestamp << "] "
+                     << "[" << logLevelToString(entry.level) << "] "
+                     << entry.message << std::endl;
+            }
+        }
+
+        file.close();
+
+        emit logsDownloaded(filePath);
+        return true;
+
+    } catch (const std::exception& e) {
+        emit downloadFailed(QString("Error saving logs: %1").arg(e.what()));
+        return false;
+    }
+}
+
 string Logger::getTimeStamp() {
     time_t now = time(nullptr);
     tm* localTime = localtime(&now);
@@ -65,6 +135,16 @@ string Logger::getTimeStamp() {
     ostringstream oss;
     oss << put_time(localTime, "%d/%m/%y-%H:%M:%S");
     return oss.str();
+}
+
+string Logger::logLevelToString(LogLevel level) {
+    switch (level) {
+        case LogLevel::INFO: return "INFO";
+        case LogLevel::ERR: return "ERROR";
+        case LogLevel::WARNING: return "WARNING";
+        case LogLevel::INITIATE: return "INITIATE";
+        default: return "UNKNOWN";
+    }
 }
 
 void Logger::startCollecting() {

@@ -24,6 +24,10 @@ QVariant CourseModel::data(const QModelIndex &index, int role) const
             return course.name;
         case TeacherNameRole:
             return course.teacherName;
+        case SemesterRole:
+            return course.semester;
+        case SemesterDisplayRole:
+            return course.semesterDisplay;
         case OriginalIndexRole:
             // If we have original indices, return them; otherwise, return the current index
             if (!m_originalIndices.empty()) {
@@ -42,9 +46,22 @@ QHash<int, QByteArray> CourseModel::roleNames() const
     roles[CourseIdRole] = "courseId";
     roles[CourseNameRole] = "courseName";
     roles[TeacherNameRole] = "teacherName";
+    roles[SemesterRole] = "semester";
+    roles[SemesterDisplayRole] = "semesterDisplay";
     roles[IsSelectedRole] = "isSelected";
     roles[OriginalIndexRole] = "originalIndex";
     return roles;
+}
+
+QString CourseModel::getSemesterDisplay(int semesterCode) const
+{
+    switch (semesterCode) {
+        case 1: return "SEM A";
+        case 2: return "SEM B";
+        case 3: return "SUMMER";
+        case 4: return "YEAR";
+        default: return "SEM A";
+    }
 }
 
 void CourseModel::populateCoursesData(const vector<Course>& courses, const vector<int>& originalIndices)
@@ -56,7 +73,9 @@ void CourseModel::populateCoursesData(const vector<Course>& courses, const vecto
         m_courses.emplace_back(
                 QString::fromStdString(course.raw_id),
                 QString::fromStdString(course.name),
-                QString::fromStdString(course.teacher)
+                QString::fromStdString(course.teacher),
+                course.semester,
+                getSemesterDisplay(course.semester)
         );
     }
 

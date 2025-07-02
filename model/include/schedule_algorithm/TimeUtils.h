@@ -1,5 +1,5 @@
-#ifndef TIMEUTILS_H
-#define TIMEUTILS_H
+#ifndef TIME_UTILS_H
+#define TIME_UTILS_H
 
 #include "parseCoursesToVector.h"
 #include "model_interfaces.h"
@@ -12,4 +12,4 @@ public:
     static int toMinutes(const std::string& time);
     static bool isOverlap(const Session* s1, const Session* s2);
 };
-#endif
+#endif // TIME_UTILS_H

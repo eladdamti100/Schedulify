@@ -20,11 +20,25 @@ vector<string> validate_courses(vector<Course> courses) {
     vector<string> errors;
     errors.reserve(50);
 
-    // Group courses by semester
+    // Group courses by semester for validation
     unordered_map<int, vector<Course>> coursesBySemester;
 
+    // Track unique course IDs to detect duplicates within same validation set
+    unordered_map<string, Course> uniqueCourses;
+
     for (const auto& course : courses) {
-        // Add course to its specific semester(s)
+        string uniqueId = course.getUniqueId();
+
+        // Check for duplicates in the input set
+        if (uniqueCourses.find(uniqueId) != uniqueCourses.end()) {
+            errors.push_back("Duplicate course found: " + course.name +
+                             " (ID: " + uniqueId + ")");
+            continue;
+        }
+
+        uniqueCourses[uniqueId] = course;
+
+        // Add course to appropriate semester(s)
         if (course.semester == 1) {
             coursesBySemester[1].push_back(course);
         } else if (course.semester == 2) {
@@ -32,7 +46,7 @@ vector<string> validate_courses(vector<Course> courses) {
         } else if (course.semester == 3) {
             coursesBySemester[3].push_back(course);
         } else if (course.semester == 4) {
-            // Year-long courses go to both semesters A and B
+            // Yearly courses go to both semesters A and B
             coursesBySemester[1].push_back(course);
             coursesBySemester[2].push_back(course);
         }
@@ -54,10 +68,7 @@ vector<string> validate_courses(vector<Course> courses) {
         Logger::get().logInfo("Validating " + semesterName + " with " +
                               to_string(semesterCourses.size()) + " courses");
 
-        // Validate this semester's courses
         vector<string> semesterErrors = validateSemesterCourses(semesterCourses, semesterName);
-
-        // Add semester errors to main error list
         errors.insert(errors.end(), semesterErrors.begin(), semesterErrors.end());
     }
 
@@ -72,9 +83,9 @@ vector<string> validateSemesterCourses(const vector<Course>& courses, const stri
 
     size_t processed = 0;
     for (const auto& course : courses) {
-        processSessionGroups(course.Lectures, course.raw_id, schedule, errors, semesterName);
-        processSessionGroups(course.labs, course.raw_id, schedule, errors, semesterName);
-        processSessionGroups(course.Tirgulim, course.raw_id, schedule, errors, semesterName);
+        processSessionGroups(course.Lectures, course, schedule, errors, semesterName);
+        processSessionGroups(course.labs, course, schedule, errors, semesterName);
+        processSessionGroups(course.Tirgulim, course, schedule, errors, semesterName);
 
         processed++;
     }
@@ -87,25 +98,26 @@ vector<string> validateSemesterCourses(const vector<Course>& courses, const stri
 }
 
 // Add semester context to session group processing
-void processSessionGroups(const vector<Group>& groups, const string& courseId,
+void processSessionGroups(const vector<Group>& groups, const Course& course,
                           BuildingSchedule& schedule, vector<string>& errors, const string& semesterName) {
+    string courseUniqueId = course.getUniqueId();
     for (const auto& group : groups) {
         for (const auto& session : group.sessions) {
-            processSession(session, courseId, schedule, errors, semesterName);
+            processSession(session, courseUniqueId, schedule, errors, semesterName);
         }
     }
 }
 
 // Add semester context to session processing
-void processSession(const Session& session, const string& courseId,
+void processSession(const Session& session, const string& courseUniqueId,
                     BuildingSchedule& schedule, vector<string>& errors, const string& semesterName) {
     if (session.building_number.empty() || session.room_number.empty()) {
-        errors.push_back("[" + semesterName + "] Course " + courseId + " has invalid room information");
+        errors.push_back("[" + semesterName + "] Course " + courseUniqueId + " has invalid room information");
         return;
     }
 
     if (session.start_time.empty() || session.end_time.empty()) {
-        errors.push_back("[" + semesterName + "] Course " + courseId + " has invalid time information");
+        errors.push_back("[" + semesterName + "] Course " + courseUniqueId + " has invalid time information");
         return;
     }
 
@@ -113,15 +125,15 @@ void processSession(const Session& session, const string& courseId,
     RoomSchedule& roomSchedule = schedule[roomKey];
     DaySlots& daySlots = roomSchedule[session.day_of_week];
 
-    OptimizedSlot newSlot(session.start_time, session.end_time, courseId);
+    OptimizedSlot newSlot(session.start_time, session.end_time, courseUniqueId);
 
     if (newSlot.start_minutes == -1 || newSlot.end_minutes == -1) {
-        errors.push_back("[" + semesterName + "] Course " + courseId + " has invalid time format");
+        errors.push_back("[" + semesterName + "] Course " + courseUniqueId + " has invalid time format");
         return;
     }
 
     if (newSlot.start_minutes >= newSlot.end_minutes) {
-        errors.push_back("[" + semesterName + "] Course " + courseId + " has start time after end time");
+        errors.push_back("[" + semesterName + "] Course " + courseUniqueId + " has start time after end time");
         return;
     }
 
@@ -129,7 +141,7 @@ void processSession(const Session& session, const string& courseId,
     for (const auto& existingSlot : daySlots) {
         if (newSlot.overlapsWith(existingSlot)) {
             stringstream errorMsg;
-            errorMsg << "[" << semesterName << "] Course " << courseId << " overlaps with "
+            errorMsg << "[" << semesterName << "] Course " << courseUniqueId << " overlaps with "
                      << existingSlot.course_id << " in " << session.building_number
                      << "-" << session.room_number << " on day " << session.day_of_week
                      << " (" << session.start_time << "-" << session.end_time << ")";

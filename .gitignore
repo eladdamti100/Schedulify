@@ -1,6 +1,12 @@
 build/
 ../.idea/
 .idea/
+.env
 .vscode/
 cmake-build-debug/
 tests/model-tests/cmake-build-debug/
+*.iml
+*.iws
+# OR more specifically:
+.idea/runConfigurations/
+.idea/workspace.xml
