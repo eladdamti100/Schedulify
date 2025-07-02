@@ -9,7 +9,6 @@
 #include <QJsonObject>
 #include <QCoreApplication>
 #include <QPointer>
-
 #include "logger.h"
 #include "controller_manager.h"
 

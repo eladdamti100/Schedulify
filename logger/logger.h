@@ -8,6 +8,9 @@
 #include <fstream>
 #include <QObject>
 #include <sstream>
+#include <QFileDialog>
+#include <QStandardPaths>
+#include <QDateTime>
 
 using std::string;
 using std::vector;
@@ -40,6 +43,9 @@ public:
 
     const vector<LogEntry>& getLogs() const;
 
+    // New method for downloading logs
+    Q_INVOKABLE bool downloadLogs();
+
     // message collection (for course validator)
     void startCollecting();
     void stopCollecting();
@@ -51,6 +57,8 @@ public:
 
 signals:
     void logAdded();
+    void logsDownloaded(const QString& filePath);
+    void downloadFailed(const QString& error);  // ADDED: Missing signal
 
 private:
     Logger();
@@ -62,6 +70,7 @@ private:
 
     void log(LogLevel level, const string& message);
     static string getTimeStamp();
+    static string logLevelToString(LogLevel level);
 
     vector<LogEntry> logList;
     mutable std::mutex logMutex;

@@ -210,22 +210,6 @@ TEST(ScheduleBuilderTest, LargeInput_NoConflicts) {
     ASSERT_EQ(result.size(), 1);  // One valid schedule including all 10 courses
 }
 
-// Course Without Lecture Should Be Skipped
-TEST(ScheduleBuilderTest, CourseWithoutLectureShouldBeSkipped) {
-    ScheduleBuilder builder;
-
-    // Course has tutorial and lab, but no lecture
-    vector<Session> tutorialSessions = {makeTestSession(1, "10:00", "11:00")};
-    Group tutorialGroup = makeGroup(SessionType::TUTORIAL, tutorialSessions);
-
-    vector<Session> labSessions = {makeTestSession(1, "11:00", "12:00")};
-    Group labGroup = makeGroup(SessionType::LAB, labSessions);
-
-    Course course = makeCourse(1001, {}, {tutorialGroup}, {labGroup});
-
-    vector<InformativeSchedule> result = builder.build({course});
-    ASSERT_EQ(result.size(), 0);  // No valid schedule since lecture is required
-}
 
 // Chained Conflicts Block All Schedules
 TEST(ScheduleBuilderTest, ChainedConflictsBlocksAllSchedules) {

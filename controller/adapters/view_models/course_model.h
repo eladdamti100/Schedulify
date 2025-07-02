@@ -13,9 +13,15 @@ struct CourseM {
     QString id;
     QString name;
     QString teacherName;
+    int semester;
+    QString semesterDisplay;
 
-    CourseM(QString  id, QString  name, QString  teacherName)
-            : id(std::move(id)), name(std::move(name)), teacherName(std::move(teacherName)) {}
+    CourseM(QString id, QString name, QString teacherName, int semester, QString semesterDisplay)
+            : id(std::move(id))
+            , name(std::move(name))
+            , teacherName(std::move(teacherName))
+            , semester(semester)
+            , semesterDisplay(std::move(semesterDisplay)) {}
 };
 
 // Qt list model for courses
@@ -28,6 +34,8 @@ public:
         CourseIdRole = Qt::UserRole + 1,
         CourseNameRole,
         TeacherNameRole,
+        SemesterRole,
+        SemesterDisplayRole,
         IsSelectedRole,
         OriginalIndexRole
     };
@@ -45,6 +53,9 @@ public:
 private:
     vector<CourseM> m_courses;
     vector<int> m_originalIndices;
+
+    // Helper method to convert semester code to display string
+    QString getSemesterDisplay(int semesterCode) const;
 };
 
 #endif // COURSE_MODEL_H

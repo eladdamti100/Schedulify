@@ -1,14 +1,17 @@
 #pragma once
-#include <QObject>
-#include <vector>
 #include "model_access.h"
 #include "model_interfaces.h"
+
+#include <QObject>
+#include <vector>
+#include <utility>
+
 
 class ScheduleGenerator : public QObject {
 Q_OBJECT
 
 public:
-    ScheduleGenerator(IModel* modelConn, const std::vector<Course>& courses, QObject* parent = nullptr);
+    ScheduleGenerator(IModel* model, const vector<Course>& courses, QString  semester);
 
 public slots:
     void generateSchedules();
@@ -18,5 +21,6 @@ signals:
 
 private:
     IModel* modelConnection;
-    std::vector<Course> selectedCourses;
+    vector<Course> coursesToProcess;
+    QString semesterName;
 };
