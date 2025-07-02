@@ -236,12 +236,6 @@ vector<Course> Model::generateCourses(const string& path) {
         } else {
             Logger::get().logInfo("Successfully parsed " + std::to_string(courses.size()) + " courses from " + path);
 
-            // Log unique IDs for debugging
-            Logger::get().logInfo("Course unique IDs:");
-            for (const auto& course : courses) {
-                Logger::get().logInfo("  - " + course.getUniqueId() + ": " + course.getDisplayName());
-            }
-
             size_t lastSlash = path.find_last_of("/\\");
             string fileName = (lastSlash != string::npos) ? path.substr(lastSlash + 1) : path;
             const string& fileType = extension;
@@ -307,12 +301,6 @@ vector<Course> Model::loadCoursesFromHistory(const vector<int>& fileIds) {
         Logger::get().logInfo("Courses loaded: " + std::to_string(courses.size()));
         Logger::get().logInfo("Conflicts resolved: " + std::to_string(warnings.size()));
 
-        // Log loaded course unique IDs
-        Logger::get().logInfo("Loaded course unique IDs:");
-        for (const auto& course : courses) {
-            Logger::get().logInfo("  - " + course.getUniqueId() + ": " + course.getDisplayName());
-        }
-
         if (!warnings.empty()) {
             for (const string& warning : warnings) {
                 Logger::get().logWarning(warning);
@@ -364,9 +352,6 @@ vector<FileEntity> Model::getFileHistory() {
         auto files = dbIntegration.getAllFiles();
         Logger::get().logInfo("Retrieved " + std::to_string(files.size()) + " files from history");
 
-        if (files.empty()) {
-            Logger::get().logInfo("No files found in database - this is normal for first use");
-        }
         return files;
 
     } catch (const std::exception& e) {

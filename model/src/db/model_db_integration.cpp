@@ -104,12 +104,6 @@ bool ModelDatabaseIntegration::loadCoursesToDatabase(const vector<Course>& cours
             return false;
         }
 
-        // Log course unique IDs being saved
-        Logger::get().logInfo("Saving courses with unique IDs:");
-        for (const auto& course : courses) {
-            Logger::get().logInfo("  - " + course.getUniqueId() + ": " + course.getDisplayName());
-        }
-
         if (!db.courses()->insertCourses(courses, fileId)) {
             Logger::get().logError("Failed to insert courses into database for file ID: " + to_string(fileId));
             Logger::get().logWarning("File entry created but courses not saved - partial database state");

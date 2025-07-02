@@ -254,7 +254,6 @@ bool DatabaseSchema::createScheduleTable() {
         return false;
     }
 
-    Logger::get().logInfo("Enhanced schedule table (v3) created successfully with unique_id and semester support");
     return true;
 }
 

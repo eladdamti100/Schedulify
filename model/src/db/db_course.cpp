@@ -15,7 +15,6 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
     }
 
     QSqlQuery query(db);
-    // CHANGED: Use INSERT OR IGNORE instead of INSERT OR REPLACE
     query.prepare(R"(
         INSERT OR IGNORE INTO course
         (course_file_id, raw_id, name, teacher, semester, lectures_json, tutorials_json, labs_json, blocks_json, file_id, updated_at)
@@ -40,14 +39,12 @@ bool DatabaseCourseManager::insertCourse(const Course& course, int fileId) {
         return false;
     }
 
-    // Check if the insertion actually happened (wasn't ignored)
+    // Check if the insertion actually happened
     int rowsAffected = query.numRowsAffected();
     if (rowsAffected == 0) {
-        Logger::get().logInfo("Course already exists, skipped: " + course.getUniqueId());
-        return true; // Still return true as this is expected behavior
+        return true;
     }
 
-    Logger::get().logInfo("Successfully inserted course with unique ID: " + course.getUniqueId());
     return true;
 }
 
@@ -315,9 +312,7 @@ vector<Course> DatabaseCourseManager::resolveConflicts(const map<string, vector<
         const vector<CourseConflictInfo>& conflicts = pair.second;
 
         if (conflicts.size() == 1) {
-            // No conflict, just add the course
             courses.push_back(conflicts[0].course);
-            Logger::get().logInfo("Added course without conflict: " + conflicts[0].course.getUniqueId());
         } else {
             // Multiple courses with same unique ID, resolve by upload time
             auto latest = std::max_element(conflicts.begin(), conflicts.end(),
