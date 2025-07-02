@@ -107,13 +107,10 @@ Page {
     Connections {
         target: controller
         function onSchedulesFiltered(filteredCount, totalCount) {
-            console.log("onSchedulesFiltered called with filteredCount:", filteredCount, "totalCount:", totalCount)
-
             totalSchedules = filteredCount        // Update the visible count
             totalAllSchedules = totalCount        // Update the total count
             isFiltered = true                     // Mark as filtered
 
-            // Force the totalLabel to update by triggering property change
             if (tableModel) {
                 tableModel.updateRows()
             }
@@ -121,7 +118,6 @@ Page {
         function onFilterStateChanged() {
             isFiltered = controller ? controller.isFiltered : false
             totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
-            console.log("onFilterStateChanged - isFiltered:", isFiltered, "totalSchedules:", totalSchedules)
         }
     }
 
@@ -598,12 +594,32 @@ Page {
                     }
                 }
 
-                property var colors: getSemesterColors(currentSemester)
+                // FIXED: Make individual color properties reactive to currentSemester changes
+                property string bgColor: {
+                    var colors = getSemesterColors(currentSemester)
+                    return colors.bg
+                }
+                property string bgHoverColor: {
+                    var colors = getSemesterColors(currentSemester)
+                    return colors.bgHover
+                }
+                property string borderColor: {
+                    var colors = getSemesterColors(currentSemester)
+                    return colors.border
+                }
+                property string borderHoverColor: {
+                    var colors = getSemesterColors(currentSemester)
+                    return colors.borderHover
+                }
+                property string textColor: {
+                    var colors = getSemesterColors(currentSemester)
+                    return colors.text
+                }
 
                 // Visual styling
-                color: mouseArea.containsMouse ? colors.bgHover : colors.bg
+                color: mouseArea.containsMouse ? bgHoverColor : bgColor
                 radius: 10
-                border.color: mouseArea.containsMouse ? colors.borderHover : colors.border
+                border.color: mouseArea.containsMouse ? borderHoverColor : borderColor
                 border.width: 2
 
                 // Smooth color transitions
@@ -630,7 +646,7 @@ Page {
                     }
                     font.pixelSize: 18
                     font.weight: Font.Bold
-                    color: semesterSwapButton.colors.text
+                    color: semesterSwapButton.textColor
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -765,10 +781,7 @@ Page {
                         })
                     }
 
-                    function onCurrentSemesterChanged() {
-                        // Update colors when current semester changes
-                        semesterSwapButton.colors = semesterSwapButton.getSemesterColors(currentSemester)
-                    }
+                    // REMOVED: onCurrentSemesterChanged handler since colors is now reactive
                 }
             }
 
