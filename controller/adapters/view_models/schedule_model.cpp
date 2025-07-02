@@ -11,16 +11,23 @@ void ScheduleModel::loadSchedules(const std::vector<InformativeSchedule>& schedu
     m_isFiltered = false;
 
     updateUniqueIdMappings();
+    m_currentScheduleIndex = 0;
     notifyDataChanged();
+    emit currentScheduleIndexChanged();
 }
 
 void ScheduleModel::setCurrentScheduleIndex(int index) {
     const auto& activeSchedules = getActiveSchedules();
 
-    if (index >= 0 && index < static_cast<int>(activeSchedules.size()) && m_currentScheduleIndex != index) {
-        m_currentScheduleIndex = index;
-        emit currentScheduleIndexChanged();
+    int clampedIndex = 0;
+    if (!activeSchedules.empty()) {
+        clampedIndex = qBound(0, index, static_cast<int>(activeSchedules.size()) - 1);
     }
+
+    if (m_currentScheduleIndex != clampedIndex || activeSchedules.empty()) {
+        m_currentScheduleIndex = clampedIndex;
+    }
+    emit currentScheduleIndexChanged();
 }
 
 int ScheduleModel::scheduleCount() const {

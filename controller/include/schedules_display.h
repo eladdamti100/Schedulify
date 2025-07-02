@@ -7,6 +7,7 @@
 #include "schedule_model.h"
 #include "ChatBot.h"
 
+#include <QTimer>
 #include <QObject>
 #include <QVariant>
 #include <QVariantMap>

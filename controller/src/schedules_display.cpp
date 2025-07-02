@@ -49,10 +49,9 @@ void SchedulesDisplayController::loadSemesterScheduleData(const QString& semeste
 
 void SchedulesDisplayController::switchToSemester(const QString& semester) {
     if (m_currentSemester == semester) {
-        return; // Already on this semester
+        return;
     }
 
-    // Check if the semester can be clicked (has finished loading)
     if (!canClickSemester(semester)) {
         qWarning() << "Semester" << semester << "is not ready to be clicked yet";
         return;
@@ -76,6 +75,14 @@ void SchedulesDisplayController::switchToSemester(const QString& semester) {
     m_scheduleModel->setCurrentScheduleIndex(0);
 
     emit currentSemesterChanged();
+
+    QTimer::singleShot(50, this, [this]() {
+        if (m_scheduleModel) {
+            emit m_scheduleModel->scheduleDataChanged();
+            emit m_scheduleModel->currentScheduleIndexChanged();
+            emit m_scheduleModel->scheduleCountChanged();
+        }
+    });
 }
 
 void SchedulesDisplayController::allSemestersGenerated() {

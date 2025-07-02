@@ -23,6 +23,7 @@ Page {
 
     property var controller: schedulesDisplayController
     property var scheduleModel: controller ? controller.scheduleModel : null
+
     property int currentIndex: scheduleModel ? scheduleModel.currentScheduleIndex : 0
     property int totalSchedules: scheduleModel ? scheduleModel.scheduleCount : 0
     property int totalAllSchedules: scheduleModel ? scheduleModel.totalScheduleCount : 0
@@ -56,6 +57,18 @@ Page {
     // Semester navigation properties
     property string currentSemester: controller ? controller.getCurrentSemester() : "A"
     property bool allSemestersLoaded: controller && controller.allSemestersLoaded ? controller.allSemestersLoaded : false
+
+    onCurrentSemesterChanged: {
+        currentIndex = Qt.binding(function() { return scheduleModel ? scheduleModel.currentScheduleIndex : 0 })
+        totalSchedules = Qt.binding(function() { return scheduleModel ? scheduleModel.scheduleCount : 0 })
+        totalAllSchedules = Qt.binding(function() { return scheduleModel ? scheduleModel.totalScheduleCount : 0 })
+
+        if (tableModel) {
+            Qt.callLater(function() {
+                tableModel.updateRows()
+            })
+        }
+    }
 
     MouseArea {
         id: outsideClickArea
@@ -93,26 +106,38 @@ Page {
     Connections {
         target: scheduleModel
         function onCurrentScheduleIndexChanged() {
+            currentIndex = scheduleModel ? scheduleModel.currentScheduleIndex : 0
             if (tableModel) {
-                tableModel.updateRows()
+                Qt.callLater(function() {
+                    tableModel.updateRows()
+                })
             }
         }
+
         function onScheduleDataChanged() {
             if (tableModel) {
-                tableModel.updateRows()
+                Qt.callLater(function() {
+                    tableModel.updateRows()
+                })
             }
+        }
+
+        function onScheduleCountChanged() {
+            totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
         }
     }
 
     Connections {
         target: controller
         function onSchedulesFiltered(filteredCount, totalCount) {
-            totalSchedules = filteredCount        // Update the visible count
-            totalAllSchedules = totalCount        // Update the total count
-            isFiltered = true                     // Mark as filtered
+            totalSchedules = filteredCount
+            totalAllSchedules = totalCount
+            isFiltered = true
 
             if (tableModel) {
-                tableModel.updateRows()
+                Qt.callLater(function() {
+                    tableModel.updateRows()
+                })
             }
         }
         function onFilterStateChanged() {
@@ -125,13 +150,31 @@ Page {
         target: controller
         function onCurrentSemesterChanged() {
             currentSemester = controller.getCurrentSemester()
+
+            // Force immediate update of schedule-related properties
             totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
+            currentIndex = scheduleModel ? scheduleModel.currentScheduleIndex : 0
+
+            // Force table model update with a slight delay to ensure data is loaded
+            if (tableModel) {
+                Qt.callLater(function() {
+                    tableModel.updateRows()
+                })
+            }
         }
         function onAllSemestersReady() {
             allSemestersLoaded = true
         }
         function onSemesterSchedulesLoaded(semester) {
-            // Update button states when new semester data is loaded
+            // If this is the current semester, force an update
+            if (semester === currentSemester) {
+                Qt.callLater(function() {
+                    totalSchedules = scheduleModel ? scheduleModel.scheduleCount : 0
+                    if (tableModel) {
+                        tableModel.updateRows()
+                    }
+                })
+            }
         }
     }
 
