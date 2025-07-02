@@ -32,9 +32,12 @@ public:
     Course getCourseById(int id);
     vector<Course> getCoursesByFileId(int fileId);
     vector<Course> getCoursesByFileIds(const vector<int>& fileIds, vector<string>& warnings);
+    vector<Course> getCoursesBySemester(int semester);
+    vector<Course> getCoursesByFileIdAndSemester(int fileId, int semester);
 
     // Course utility operations
     int getCourseCount();
+    int getCourseCountBySemester(int semester);
     int getCourseCountByFileId(int fileId);
 
 private:

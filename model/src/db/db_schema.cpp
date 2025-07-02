@@ -127,6 +127,7 @@ bool DatabaseSchema::createCourseTable() {
             raw_id TEXT NOT NULL,
             name TEXT NOT NULL,
             teacher TEXT NOT NULL,
+            semester INTEGER NOT NULL DEFAULT 1,
             lectures_json TEXT DEFAULT '[]',
             tutorials_json TEXT DEFAULT '[]',
             labs_json TEXT DEFAULT '[]',
@@ -135,7 +136,7 @@ bool DatabaseSchema::createCourseTable() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (file_id) REFERENCES file(id) ON DELETE CASCADE,
-            UNIQUE(course_file_id, file_id)
+            UNIQUE(course_file_id, semester, file_id)
         )
     )";
 
@@ -171,8 +172,27 @@ bool DatabaseSchema::createCourseIndexes() {
         success = false;
     }
 
-    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_composite ON course(course_file_id, file_id)")) {
+    // Updated composite index to include semester
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_composite ON course(course_file_id, semester, file_id)")) {
         Logger::get().logWarning("Failed to create course composite index");
+        success = false;
+    }
+
+    // Add semester index for efficient semester-based queries
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_semester ON course(semester)")) {
+        Logger::get().logWarning("Failed to create course semester index");
+        success = false;
+    }
+
+    // Add composite index for semester + course_file_id queries
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_semester_file_id ON course(semester, course_file_id)")) {
+        Logger::get().logWarning("Failed to create course semester+file_id index");
+        success = false;
+    }
+
+    // NEW: Add index for unique constraint lookup
+    if (!executeQuery("CREATE INDEX IF NOT EXISTS idx_course_unique_lookup ON course(raw_id, semester)")) {
+        Logger::get().logWarning("Failed to create course unique lookup index");
         success = false;
     }
 

@@ -26,7 +26,7 @@ public:
     // Course JSON conversion helpers
     static string courseToJson(const Course& course);
     static Course courseFromJson(const string& json, int id, const string& raw_id,
-                                 const string& name, const string& teacher);
+                                 const string& name, const string& teacher, int semester = 1);
 
 private:
     DatabaseJsonHelpers() = default; // Static class, no instantiation

@@ -44,21 +44,41 @@ public:
 class Course {
 public:
     int id;
-    int semester; // 1: semester A 2: semster B 3: Semester summer 4: All semesters 
+    int semester; // 1: semester A, 2: semester B, 3: summer, 4: yearly
     string raw_id;
     string name;
     string teacher;
     vector<Group> Lectures;
-    vector<Group> DepartmentalSessions; // ש.מחלקה
-    vector<Group> Reinforcements;       // תגבור
-    vector<Group> Guidance;             // הדרכה
-    vector<Group> OptionalColloquium;   // קולוקויום רשות
-    vector<Group> Registration;         // רישום
+    vector<Group> DepartmentalSessions;
+    vector<Group> Reinforcements;
+    vector<Group> Guidance;
+    vector<Group> OptionalColloquium;
+    vector<Group> Registration;
     vector<Group> Thesis;
     vector<Group> Project;
     vector<Group> Tirgulim;
     vector<Group> labs;
     vector<Group> blocks;
+
+    string getUniqueId() const {
+        return raw_id + "_sem" + std::to_string(semester);
+    }
+
+    bool conflictsWith(const Course& other) const {
+        return getUniqueId() == other.getUniqueId();
+    }
+
+    string getDisplayName() const {
+        string semesterName;
+        switch(semester) {
+            case 1: semesterName = "Semester A"; break;
+            case 2: semesterName = "Semester B"; break;
+            case 3: semesterName = "Summer"; break;
+            case 4: semesterName = "Yearly"; break;
+            default: semesterName = "Unknown"; break;
+        }
+        return name + " (" + semesterName + ")";
+    }
 };
 
 

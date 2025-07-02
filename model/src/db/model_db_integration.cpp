@@ -91,18 +91,23 @@ bool ModelDatabaseIntegration::loadCoursesToDatabase(const vector<Course>& cours
     try {
         auto& db = DatabaseManager::getInstance();
 
-        // Verify database connection before proceeding
         if (!db.isConnected()) {
             Logger::get().logError("Database connection lost during course loading");
             return false;
         }
 
-        // create a new file entry for each upload
+        // Create a new file entry for each upload
         int fileId = db.files()->insertFile(fileName, fileType);
 
         if (fileId <= 0) {
             Logger::get().logError("Failed to create file entry for: " + fileName);
             return false;
+        }
+
+        // Log course unique IDs being saved
+        Logger::get().logInfo("Saving courses with unique IDs:");
+        for (const auto& course : courses) {
+            Logger::get().logInfo("  - " + course.getUniqueId() + ": " + course.getDisplayName());
         }
 
         if (!db.courses()->insertCourses(courses, fileId)) {

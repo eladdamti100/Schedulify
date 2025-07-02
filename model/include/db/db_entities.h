@@ -34,6 +34,7 @@ struct CourseEntity {
     string raw_id;                // Original course identifier from file
     string name;                  // Course name
     string teacher;               // Teacher/instructor name
+    int semester = 1;             // Semester number (1=A, 2=B, 3=Summer, 4=Yearly)
     string lectures_json;         // JSON serialized lectures groups
     string tutorials_json;        // JSON serialized tutorials groups
     string labs_json;             // JSON serialized labs groups
@@ -46,9 +47,10 @@ struct CourseEntity {
     CourseEntity() = default;
 
     // Constructor for database insertion
-    CourseEntity(int courseId, string rawId, string courseName, string teacherName, int fileId) : id(courseId),
-    raw_id(std::move(rawId)), name(std::move(courseName)), teacher(std::move(teacherName)), file_id(fileId),
-    created_at(QDateTime::currentDateTime()), updated_at(QDateTime::currentDateTime()) {}
+    CourseEntity(int courseId, string rawId, string courseName, string teacherName, int semesterNum, int fileId) :
+            id(courseId), raw_id(std::move(rawId)), name(std::move(courseName)), teacher(std::move(teacherName)),
+            semester(semesterNum), file_id(fileId), created_at(QDateTime::currentDateTime()),
+            updated_at(QDateTime::currentDateTime()) {}
 };
 
 struct MetadataEntity {
@@ -82,6 +84,7 @@ struct CourseConflictInfo {
     int course_id = 0;
     string raw_id;
     string course_name;
+    int semester = 1;
     int file_id = 0;
     string file_name;
     QDateTime upload_time;
@@ -90,9 +93,9 @@ struct CourseConflictInfo {
     CourseConflictInfo() = default;
 
     // Constructor for conflict tracking
-    CourseConflictInfo(int courseId, string rawId, string name, int fileId, string fileName, QDateTime uploadTime) :
-    course_id(courseId), raw_id(std::move(rawId)), course_name(std::move(name)), file_id(fileId),
-    file_name(std::move(fileName)), upload_time(std::move(uploadTime)) {}
+    CourseConflictInfo(int courseId, string rawId, string name, int semesterNum, int fileId, string fileName, QDateTime uploadTime) :
+            course_id(courseId), raw_id(std::move(rawId)), course_name(std::move(name)), semester(semesterNum), file_id(fileId),
+            file_name(std::move(fileName)), upload_time(std::move(uploadTime)) {}
 };
 
 struct ScheduleEntity {
