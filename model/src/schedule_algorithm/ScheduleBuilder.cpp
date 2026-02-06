@@ -219,7 +219,7 @@ InformativeSchedule ScheduleBuilder::convertToInformativeSchedule(const vector<C
             ScheduleDay scheduleDay;
             scheduleDay.day = dayNames[day];
 
-            auto it = daySchedules.find(day);
+            auto it = daySchedules.find(day +1);
             if (it != daySchedules.end()) {
                 scheduleDay.day_items = it->second;
                 sort(scheduleDay.day_items.begin(), scheduleDay.day_items.end(),
