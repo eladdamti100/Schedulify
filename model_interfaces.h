@@ -162,6 +162,43 @@ struct FileLoadData {
 };
 
 
+// Lightweight schedule metrics for in-memory bot filtering (no DB dependency)
+struct ScheduleFilterMetrics {
+    string unique_id;
+    string semester;
+    int amount_days = 0;
+    int amount_gaps = 0;
+    int gaps_time = 0;
+    int avg_start = 0;
+    int avg_end = 0;
+    int earliest_start = 0;
+    int latest_end = 0;
+    int longest_gap = 0;
+    int total_class_time = 0;
+    int consecutive_days = 0;
+    bool weekend_classes = false;
+    bool has_morning_classes = false;
+    bool has_early_morning = false;
+    bool has_evening_classes = false;
+    bool has_late_evening = false;
+    int max_daily_hours = 0;
+    int min_daily_hours = 0;
+    int avg_daily_hours = 0;
+    bool has_lunch_break = false;
+    int max_daily_gaps = 0;
+    int avg_gap_length = 0;
+    int schedule_span = 0;
+    double compactness_ratio = 0.0;
+    bool weekday_only = false;
+    bool has_monday = false;
+    bool has_tuesday = false;
+    bool has_wednesday = false;
+    bool has_thursday = false;
+    bool has_friday = false;
+    bool has_saturday = false;
+    bool has_sunday = false;
+};
+
 // Bot structs
 
 struct BotQueryRequest {
@@ -170,6 +207,7 @@ struct BotQueryRequest {
     vector<int> availableScheduleIds;
     vector<string> availableUniqueIds;
     string semester;
+    vector<ScheduleFilterMetrics> viewScheduleMetrics;
 
     BotQueryRequest() = default;
     BotQueryRequest(string message, string metadata, string semester,const vector<int>& ids)

@@ -236,14 +236,52 @@ BotQueryRequest SchedulesDisplayController::createBotQueryRequest(const QString&
     request.scheduleMetadata = "";
     request.semester = m_currentSemester.toStdString();
 
-    if (m_scheduleModel) {
-        // NEW: Get unique IDs as primary mechanism
+    std::vector<InformativeSchedule>* currentSchedules = getCurrentScheduleVector();
+    if (currentSchedules && !currentSchedules->empty()) {
+        for (const InformativeSchedule& s : *currentSchedules) {
+            request.availableUniqueIds.push_back(s.unique_id);
+            request.availableScheduleIds.push_back(s.index);
+            ScheduleFilterMetrics m;
+            m.unique_id = s.unique_id;
+            m.semester = s.semester;
+            m.amount_days = s.amount_days;
+            m.amount_gaps = s.amount_gaps;
+            m.gaps_time = s.gaps_time;
+            m.avg_start = s.avg_start;
+            m.avg_end = s.avg_end;
+            m.earliest_start = s.earliest_start;
+            m.latest_end = s.latest_end;
+            m.longest_gap = s.longest_gap;
+            m.total_class_time = s.total_class_time;
+            m.consecutive_days = s.consecutive_days;
+            m.weekend_classes = s.weekend_classes;
+            m.has_morning_classes = s.has_morning_classes;
+            m.has_early_morning = s.has_early_morning;
+            m.has_evening_classes = s.has_evening_classes;
+            m.has_late_evening = s.has_late_evening;
+            m.max_daily_hours = s.max_daily_hours;
+            m.min_daily_hours = s.min_daily_hours;
+            m.avg_daily_hours = s.avg_daily_hours;
+            m.has_lunch_break = s.has_lunch_break;
+            m.max_daily_gaps = s.max_daily_gaps;
+            m.avg_gap_length = s.avg_gap_length;
+            m.schedule_span = s.schedule_span;
+            m.compactness_ratio = s.compactness_ratio;
+            m.weekday_only = s.weekday_only;
+            m.has_monday = s.has_monday;
+            m.has_tuesday = s.has_tuesday;
+            m.has_wednesday = s.has_wednesday;
+            m.has_thursday = s.has_thursday;
+            m.has_friday = s.has_friday;
+            m.has_saturday = s.has_saturday;
+            m.has_sunday = s.has_sunday;
+            request.viewScheduleMetrics.push_back(m);
+        }
+    } else if (m_scheduleModel) {
         QVariantList allUniqueIds = m_scheduleModel->getAllScheduleUniqueIds();
         for (const QVariant& uniqueId : allUniqueIds) {
             request.availableUniqueIds.push_back(uniqueId.toString().toStdString());
         }
-
-        // Keep indices for backward compatibility
         QVariantList allIds = m_scheduleModel->getAllScheduleIds();
         for (const QVariant& id : allIds) {
             request.availableScheduleIds.push_back(id.toInt());

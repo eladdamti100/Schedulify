@@ -1,4 +1,7 @@
 #include "claude_api_integration.h"
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 
 struct APIResponse {
     string data;
@@ -7,6 +10,165 @@ struct APIResponse {
 
     APIResponse() : response_code(0), success(false) {}
 };
+
+namespace {
+string extractWhereClause(string sql) {
+    string lower = sql;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    size_t w = lower.find(" where ");
+    if (w == string::npos) return "";
+    size_t start = w + 7;
+    size_t end = lower.find(" order by ", start);
+    if (end == string::npos) end = sql.size();
+    string where = sql.substr(start, end - start);
+    where.erase(0, where.find_first_not_of(" \t\r\n"));
+    where.erase(where.find_last_not_of(" \t\r\n") + 1);
+    return where;
+}
+
+void substituteParameters(string& where, const vector<string>& params) {
+    string result;
+    result.reserve(where.size() + 64);
+    size_t paramIndex = 0;
+    for (size_t i = 0; i < where.size(); ++i) {
+        if (where[i] == '?' && paramIndex < params.size()) {
+            const string& p = params[paramIndex++];
+            bool quote = (p.size() >= 2 && ((p.front() == '\'' && p.back() == '\'') || (p.front() == '"' && p.back() == '"')));
+            result += quote ? p.substr(1, p.size() - 2) : p;
+        } else {
+            result += where[i];
+        }
+    }
+    where = std::move(result);
+}
+
+bool parseCondition(const string& cond, string& column, string& op, string& valueStr) {
+    string c = cond;
+    c.erase(0, c.find_first_not_of(" \t"));
+    c.erase(c.find_last_not_of(" \t") + 1);
+    if (c.empty()) return false;
+    const char* ops[] = { ">=", "<=", "!=", "=", ">", "<" };
+    size_t opPos = string::npos;
+    size_t opLen = 0;
+    for (const char* o : ops) {
+        size_t pos = c.find(o);
+        if (pos != string::npos && (opPos == string::npos || pos < opPos)) {
+            opPos = pos;
+            opLen = strlen(o);
+        }
+    }
+    if (opPos == string::npos) return false;
+    column = c.substr(0, opPos);
+    op = c.substr(opPos, opLen);
+    valueStr = c.substr(opPos + opLen);
+    auto trim = [](string& s) {
+        s.erase(0, s.find_first_not_of(" \t'\""));
+    };
+    auto trimEnd = [](string& s) {
+        size_t last = s.find_last_not_of(" \t'\"");
+        if (last != string::npos) s.erase(last + 1); else s.clear();
+    };
+    trim(column);
+    trimEnd(column);
+    trim(valueStr);
+    trimEnd(valueStr);
+    return true;
+}
+
+double getMetricValue(const ScheduleFilterMetrics& m, const string& column) {
+    if (column == "amount_days") return m.amount_days;
+    if (column == "amount_gaps") return m.amount_gaps;
+    if (column == "gaps_time") return m.gaps_time;
+    if (column == "avg_start") return m.avg_start;
+    if (column == "avg_end") return m.avg_end;
+    if (column == "earliest_start") return m.earliest_start;
+    if (column == "latest_end") return m.latest_end;
+    if (column == "longest_gap") return m.longest_gap;
+    if (column == "total_class_time") return m.total_class_time;
+    if (column == "consecutive_days") return m.consecutive_days;
+    if (column == "weekend_classes") return m.weekend_classes ? 1 : 0;
+    if (column == "has_morning_classes") return m.has_morning_classes ? 1 : 0;
+    if (column == "has_early_morning") return m.has_early_morning ? 1 : 0;
+    if (column == "has_evening_classes") return m.has_evening_classes ? 1 : 0;
+    if (column == "has_late_evening") return m.has_late_evening ? 1 : 0;
+    if (column == "max_daily_hours") return m.max_daily_hours;
+    if (column == "min_daily_hours") return m.min_daily_hours;
+    if (column == "avg_daily_hours") return m.avg_daily_hours;
+    if (column == "has_lunch_break") return m.has_lunch_break ? 1 : 0;
+    if (column == "max_daily_gaps") return m.max_daily_gaps;
+    if (column == "avg_gap_length") return m.avg_gap_length;
+    if (column == "schedule_span") return m.schedule_span;
+    if (column == "compactness_ratio") return m.compactness_ratio;
+    if (column == "weekday_only") return m.weekday_only ? 1 : 0;
+    if (column == "has_monday") return m.has_monday ? 1 : 0;
+    if (column == "has_tuesday") return m.has_tuesday ? 1 : 0;
+    if (column == "has_wednesday") return m.has_wednesday ? 1 : 0;
+    if (column == "has_thursday") return m.has_thursday ? 1 : 0;
+    if (column == "has_friday") return m.has_friday ? 1 : 0;
+    if (column == "has_saturday") return m.has_saturday ? 1 : 0;
+    if (column == "has_sunday") return m.has_sunday ? 1 : 0;
+    return 0;
+}
+
+bool evaluateCondition(const ScheduleFilterMetrics& m, const string& column, const string& op, const string& valueStr, const string& /*semesterFilter*/) {
+    if (column == "semester") {
+        string v = valueStr;
+        if (v.size() >= 2 && (v.front() == '\'' || v.front() == '"')) v = v.substr(1, v.size() - 2);
+        bool match = (m.semester == v);
+        if (op == "=") return match;
+        if (op == "!=") return !match;
+        return false;
+    }
+    double lhs = getMetricValue(m, column);
+    double rhs = 0;
+    try { rhs = std::stod(valueStr); } catch (...) { return false; }
+    if (op == "=") return lhs == rhs;
+    if (op == "!=") return lhs != rhs;
+    if (op == ">") return lhs > rhs;
+    if (op == ">=") return lhs >= rhs;
+    if (op == "<") return lhs < rhs;
+    if (op == "<=") return lhs <= rhs;
+    return false;
+}
+
+vector<string> filterSchedulesInMemory(const vector<ScheduleFilterMetrics>& metrics,
+                                       const string& sqlQuery, const vector<string>& queryParameters,
+                                       const string& semester) {
+    vector<string> result;
+    string where = extractWhereClause(sqlQuery);
+    if (where.empty()) {
+        for (const auto& m : metrics) {
+            if (m.semester == semester) result.push_back(m.unique_id);
+        }
+        return result;
+    }
+    substituteParameters(where, queryParameters);
+    vector<string> conditions;
+    string lowerWhere = where;
+    std::transform(lowerWhere.begin(), lowerWhere.end(), lowerWhere.begin(), ::tolower);
+    for (size_t pos = 0; ; ) {
+        size_t next = lowerWhere.find(" and ", pos);
+        string cond = (next == string::npos) ? where.substr(pos) : where.substr(pos, next - pos);
+        conditions.push_back(cond);
+        if (next == string::npos) break;
+        pos = next + 5;
+    }
+    for (const auto& m : metrics) {
+        if (m.semester != semester) continue;
+        bool match = true;
+        for (const string& cond : conditions) {
+            string col, op, val;
+            if (!parseCondition(cond, col, op, val)) continue;
+            if (!evaluateCondition(m, col, op, val, semester)) {
+                match = false;
+                break;
+            }
+        }
+        if (match) result.push_back(m.unique_id);
+    }
+    return result;
+}
+} // namespace
 
 BotQueryResponse ClaudeAPIClient::ActivateBot(const BotQueryRequest& request) {
     BotQueryResponse response;
@@ -55,73 +217,76 @@ BotQueryResponse ClaudeAPIClient::ActivateBot(const BotQueryRequest& request) {
             return response;
         }
 
-        // Execute SQL filter if needed with semester filtering
+        // Execute SQL filter: use in-memory when we have view metrics (schedules in UI), else DB
         if (response.isFilterQuery && !response.sqlQuery.empty()) {
-            SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(response.sqlQuery);
-            if (!validation.isValid) {
-                Logger::get().logError("ActivateBot: Generated query failed validation: " + validation.errorMessage);
-                response.hasError = true;
-                response.errorMessage = "Generated query failed security validation: " + validation.errorMessage;
-                return response;
-            }
-
-            // Ensure query returns unique_id and add semester filtering
-            string semesterFilteredQuery = response.sqlQuery;
-
-            // Replace schedule_index with unique_id if needed
-            size_t pos = semesterFilteredQuery.find("schedule_index");
-            if (pos != string::npos) {
-                semesterFilteredQuery.replace(pos, 14, "unique_id");
-            }
-
-            // Convert to lowercase for parsing
-            string lowerQuery = semesterFilteredQuery;
-            std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
-
-            // Add semester filter to WHERE clause
-            if (lowerQuery.find("where") != string::npos) {
-                semesterFilteredQuery += " AND semester = ?";
-            } else {
-                semesterFilteredQuery += " WHERE semester = ?";
-            }
-
-            // Add semester to parameters
-            vector<string> enhancedParameters = response.queryParameters;
-            enhancedParameters.push_back(request.semester);
-
-            Logger::get().logInfo("Executing semester-filtered query: " + semesterFilteredQuery);
-            Logger::get().logInfo("Parameters: " + std::to_string(enhancedParameters.size()) + " total, last one is semester: " + request.semester);
-
-            // Execute query to get unique_ids directly
-            vector<string> matchingUniqueIds = db.schedules()->executeCustomQueryForUniqueIds(semesterFilteredQuery, enhancedParameters);
-
-            // Convert available schedule IDs to unique IDs for filtering
-            vector<string> availableUniqueIds;
-            for (int scheduleIndex : request.availableScheduleIds) {
-                string uniqueId = db.schedules()->getUniqueIdByScheduleIndex(scheduleIndex, request.semester);
-                if (!uniqueId.empty()) {
-                    availableUniqueIds.push_back(uniqueId);
-                }
-            }
-
-            // Filter to only include available schedules
             vector<string> filteredUniqueIds;
-            std::set<string> availableSet(availableUniqueIds.begin(), availableUniqueIds.end());
 
-            for (const string& uniqueId : matchingUniqueIds) {
-                if (availableSet.find(uniqueId) != availableSet.end()) {
-                    filteredUniqueIds.push_back(uniqueId);
+            if (!request.viewScheduleMetrics.empty()) {
+                // Filter in memory over the schedules currently in the view (no DB)
+                Logger::get().logInfo("ActivateBot: Filtering in memory over " +
+                                      std::to_string(request.viewScheduleMetrics.size()) + " schedules in view");
+                filteredUniqueIds = filterSchedulesInMemory(request.viewScheduleMetrics,
+                                                           response.sqlQuery,
+                                                           response.queryParameters,
+                                                           request.semester);
+                for (const string& uid : filteredUniqueIds) {
+                    for (size_t i = 0; i < request.viewScheduleMetrics.size(); ++i) {
+                        if (request.viewScheduleMetrics[i].unique_id == uid) {
+                            response.filteredScheduleIds.push_back(request.availableScheduleIds[i]);
+                            break;
+                        }
+                    }
                 }
+            } else {
+                // DB path when view metrics not provided
+                SQLValidator::ValidationResult validation = SQLValidator::validateScheduleQuery(response.sqlQuery);
+                if (!validation.isValid) {
+                    Logger::get().logError("ActivateBot: Generated query failed validation: " + validation.errorMessage);
+                    response.hasError = true;
+                    response.errorMessage = "Generated query failed security validation: " + validation.errorMessage;
+                    return response;
+                }
+
+                string semesterFilteredQuery = response.sqlQuery;
+                size_t pos = semesterFilteredQuery.find("schedule_index");
+                if (pos != string::npos) {
+                    semesterFilteredQuery.replace(pos, 14, "unique_id");
+                }
+                string lowerQuery = semesterFilteredQuery;
+                std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+                if (lowerQuery.find("where") != string::npos) {
+                    semesterFilteredQuery += " AND semester = ?";
+                } else {
+                    semesterFilteredQuery += " WHERE semester = ?";
+                }
+
+                vector<string> enhancedParameters = response.queryParameters;
+                enhancedParameters.push_back(request.semester);
+
+                Logger::get().logInfo("Executing semester-filtered query: " + semesterFilteredQuery);
+                vector<string> matchingUniqueIds = db.schedules()->executeCustomQueryForUniqueIds(semesterFilteredQuery, enhancedParameters);
+
+                vector<string> availableUniqueIds;
+                for (int scheduleIndex : request.availableScheduleIds) {
+                    string uniqueId = db.schedules()->getUniqueIdByScheduleIndex(scheduleIndex, request.semester);
+                    if (!uniqueId.empty()) {
+                        availableUniqueIds.push_back(uniqueId);
+                    }
+                }
+
+                std::set<string> availableSet(availableUniqueIds.begin(), availableUniqueIds.end());
+                for (const string& uniqueId : matchingUniqueIds) {
+                    if (availableSet.find(uniqueId) != availableSet.end()) {
+                        filteredUniqueIds.push_back(uniqueId);
+                    }
+                }
+
+                vector<int> filteredIds = db.schedules()->getScheduleIndicesByUniqueIds(filteredUniqueIds);
+                response.filteredScheduleIds = filteredIds;
             }
 
-            // NEW: Store unique IDs as primary result
             response.filteredUniqueIds = filteredUniqueIds;
 
-            // Convert back to schedule indices for backward compatibility
-            vector<int> filteredIds = db.schedules()->getScheduleIndicesByUniqueIds(filteredUniqueIds);
-            response.filteredScheduleIds = filteredIds;
-
-            // Update response message
             if (filteredUniqueIds.empty()) {
                 response.userMessage += "\n\n❌ No schedules match your criteria in semester " + request.semester + ".";
             } else {
@@ -358,6 +523,24 @@ BotQueryResponse ClaudeAPIClient::generateFallbackResponse(const BotQueryRequest
         response.sqlQuery = "SELECT unique_id FROM schedule WHERE has_morning_classes = ?";
         response.queryParameters = {"0"};
         response.isFilterQuery = true;
+    } else if ((userMsg.find("max") != string::npos || userMsg.find("maximum") != string::npos) &&
+               (userMsg.find("day") != string::npos || userMsg.find("days") != string::npos)) {
+        // "max 2 days learning" -> amount_days <= 2
+        for (int n = 1; n <= 7; ++n) {
+            if (userMsg.find(std::to_string(n)) != string::npos) {
+                response.userMessage = "I'll find schedules with at most " + std::to_string(n) + " study days.";
+                response.sqlQuery = "SELECT unique_id FROM schedule WHERE amount_days <= ?";
+                response.queryParameters = {std::to_string(n)};
+                response.isFilterQuery = true;
+                break;
+            }
+        }
+        if (!response.isFilterQuery) {
+            response.userMessage = "I'll find schedules with a limited number of study days.";
+            response.sqlQuery = "SELECT unique_id FROM schedule WHERE amount_days <= 4";
+            response.queryParameters = {};
+            response.isFilterQuery = true;
+        }
     } else {
         // Generic fallback
         response.userMessage = "I'm currently experiencing high demand and cannot process complex queries. Please try a simpler request like 'no early morning classes' or 'start after 10 AM'.";

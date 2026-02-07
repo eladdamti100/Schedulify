@@ -34,7 +34,7 @@ private:
     static bool extractSQLQuery(const std::string& content, std::string& sqlQuery, std::vector<std::string>& parameters);
 
     const std::string CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-    const std::string CLAUDE_MODEL = "claude-3-5-sonnet-20241022";
+    const std::string CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 };
 
 #endif // CLAUDE_API_INTEGRATION_H
